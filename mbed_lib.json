@@ -1,0 +1,57 @@
+{
+    "name": "lwip",
+    "config": {
+        "lwip-ipv4-enabled": {
+            "help": "Enable IPv4",
+            "value": true
+        },
+        "lwip-ipv6-enabled": {
+            "help": "Enable IPv6",
+            "value": false
+        },
+        "lwip-tcp-enabled": {
+            "help": "Enable TCP",
+            "value": true
+        },
+        "lwip-udp-enabled": {
+            "help": "Enable UDP",
+            "value": true
+        },
+        "lwip-dhcp-enabled": {
+            "help": "Enable DHCP",
+            "value": true
+        },
+        "lwip-dns-enabled": {
+            "help": "Enable DNS",
+            "value": true
+        },
+        "lwip-netbios-enabled": {
+            "help": "Enable NETBIOS",
+            "value": true
+        },
+        "lwip-netbios-name": {
+            "help": "NETBIOS name",
+            "value": "\"HACC2\""
+        },
+        "lwip-netbios-num-names": {
+            "help": "Number of NETBIOS names",
+            "value": 1
+        },
+        "lwip-netbios-name-len": {
+            "help": "NETBIOS name length",
+            "value": 16
+        },
+        "lwip-netbios-name-buf-size": {
+            "help": "NETBIOS name buffer size",
+            "value": 16
+        },
+        "lwip-netbios-port": {
+            "help": "NETBIOS port",
+            "value": 137
+        },
+        "lwip-netbios-ttl": {
+            "help": "NETBIOS TTL",
+            "value": 300
+        }
+    }
+} 

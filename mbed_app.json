@@ -1,0 +1,28 @@
+{
+    "target_overrides": {
+        "*": {
+            "platform.stdio-baud-rate": 115200,
+            "platform.default-serial-baud-rate": 115200,
+            "target.components_add": ["FLASHIAP", "SD"],
+            "storage.storage_type": "default",
+            "storage_filesystem.filesystem": "LITTLE",
+            "storage_filesystem.blockdevice": "FLASHIAP",
+            "storage_filesystem.internal_base_address": "0x800000",
+            "storage_filesystem.internal_size": "0x200000",
+            "target.form_factor": "ARDUINO_UNO",
+            "lwip.ipv4-enabled": true,
+            "lwip.ipv6-enabled": false,
+            "lwip.igmp-enabled": true,
+            "lwip.mdns-enabled": false,
+            "lwip.netbiosns-enabled": true,
+            "lwip.apps-enabled": true,
+            "lwip.apps.mdns-enabled": false,
+            "lwip.apps.netbiosns-enabled": true,
+            "target.features_add": ["LWIP"],
+            "lwip.ethernet-enabled": true,
+            "lwip.netbios-enabled": true,
+            "lwip.netbios-name": "HASHILUS-HACC",
+            "lwip.netbios-port": 137
+        }
+    }
+}

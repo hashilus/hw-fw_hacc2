@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HACC Control System</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { margin: 20px 0; padding: 10px; background: #f0f0f0; }
+        .control { margin: 20px 0; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>HACC Control System</h1>
+        <div class="status" id="status">
+            Loading status...
+        </div>
+        <div class="control">
+            <h2>SSR Control</h2>
+            <button onclick="controlSSR(1, true)">SSR1 ON</button>
+            <button onclick="controlSSR(1, false)">SSR1 OFF</button>
+            <br>
+            <button onclick="controlSSR(2, true)">SSR2 ON</button>
+            <button onclick="controlSSR(2, false)">SSR2 OFF</button>
+        </div>
+    </div>
+    <script>
+        function updateStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('status').innerHTML = 
+                        'System Status: ' + data.status;
+                });
+        }
+        
+        function controlSSR(id, state) {
+            fetch('/api/ssr/' + id, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    state: state
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateStatus();
+            });
+        }
+        
+        // 初期状態の更新
+        updateStatus();
+        // 5秒ごとに状態を更新
+        setInterval(updateStatus, 5000);
+    </script>
+</body>
+</html> 
