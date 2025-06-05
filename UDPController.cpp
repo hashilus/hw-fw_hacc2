@@ -155,6 +155,19 @@ void UDPController::_thread_func() {
     const auto MAX_REINIT_WAIT = 2s;
     
     while (_running) {
+        // ミスト制御の状態チェック
+        if (_mist_active) {
+            uint32_t current_time = us_ticker_read() / 1000;  // 現在時刻（ミリ秒）
+            uint32_t elapsed = current_time - _mist_start_time;
+            
+            if (elapsed >= _mist_duration) {
+                // ミスト時間が経過したらOFFにする
+                _rgb_led_driver.setColor(1, 0, 0, 0);
+                _mist_active = false;
+                log_printf(LOG_LEVEL_DEBUG, "Mist control completed after %d ms", elapsed);
+            }
+        }
+
         // Clear buffer
         memset(_recv_buffer, 0, MAX_BUFFER_SIZE);
         
@@ -527,7 +540,7 @@ void UDPController::processSofiaCommand() {
 
 void UDPController::processInfoCommand() {
     // Generate device information
-    snprintf(_send_buffer, MAX_BUFFER_SIZE, "info,%s,2.0.0,OK", 
+    snprintf(_send_buffer, MAX_BUFFER_SIZE, "info,%s,2.0.1,OK", 
              DEVICE_NAME);
     
     // Send response
