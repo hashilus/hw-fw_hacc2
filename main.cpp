@@ -18,8 +18,9 @@
 #include "rtos.h"
 #include "lwip/init.h"
 #include "lwip/opt.h"
-// #include "BufferedSerial.h"
+#include "BufferedSerial.h"
 #include "EthernetInterface.h"
+#include <memory>  // std::unique_ptr用
 
 // SSRの数とRGB LEDの数
 #define SSR_NUM_CHANNELS 4
@@ -32,9 +33,9 @@ using namespace std::chrono;
 static BufferedSerial pc(USBTX, USBRX, 115200);
 
 // オンボードLEDのピン番号は適宜修正してください
-static DigitalOut led_r(LED_RED);// 例: 赤LED
-static DigitalOut led_g(LED_GREEN); // 例: 緑LED
-static DigitalOut led_b(LED_BLUE); // 例: 青LED
+static DigitalOut led_r(LED1);  // 赤LED
+static DigitalOut led_g(LED2);  // 緑LED
+static DigitalOut led_b(LED3);  // 青LED
 
 // システムステータスを表す列挙型
 enum SystemStatus {
@@ -51,29 +52,22 @@ volatile SystemStatus current_status = STATUS_INITIALIZING;
 // パケット受信/コマンド実行表示の一時的なタイマー
 Timeout status_timeout;
 
-// 設定マネージャ
-ConfigManager* config_manager = nullptr;
+// グローバル変数
+static std::unique_ptr<ConfigManager> config_manager;
+static std::unique_ptr<NetworkManager> network_manager;
+static std::unique_ptr<UDPController> udp_controller;
+static SSRDriver ssr;
+static std::unique_ptr<RGBLEDDriver> rgb_led;
+static SerialController serial_controller(nullptr, &ssr, nullptr, pc);
 
 // SSRの出力に合わせてLEDを更新するタイマー
 Ticker led_color_updater;
 
-// SSRドライバのインスタンス
-SSRDriver ssr;
-
-// RGB LEDドライバのインスタンス
-RGBLEDDriver rgb_led;
-
-// UDPコントローラのインスタンス
-UDPController* udp_controller = nullptr;
-
-// ネットワークマネージャのインスタンス
-NetworkManager* network_manager = nullptr;
-
-// シリアルコントローラのインスタンス
-SerialController serial_controller(config_manager, &ssr, &rgb_led, pc);
-
 // シリアル出力用のミューテックス
 static Mutex serial_mutex;
+
+// Network interface
+NetworkInterface* network;
 
 // シリアル出力の安全な実装
 void safe_printf(const char* format, ...) {
@@ -131,30 +125,6 @@ void reset_temp_status() {
     }
         }
         
-// SSRの出力に応じてLEDの色を更新する
-void update_led_colors() {
-    if (!config_manager->isSSRLinkEnabled()) {
-        return;
-    }
-
-    // 各SSRのデューティ比に応じてLEDの色を更新
-        for (int i = 1; i <= 3; i++) {
-        int duty = ssr.getDutyLevel(i);
-        
-        // 0%と100%の色を取得
-        RGBColorData color0 = config_manager->getSSRLinkColor0(i);
-        RGBColorData color100 = config_manager->getSSRLinkColor100(i);
-        
-        // デューティ比に応じて色を補間
-        uint8_t r = color0.r + (color100.r - color0.r) * duty / 100;
-        uint8_t g = color0.g + (color100.g - color0.g) * duty / 100;
-        uint8_t b = color0.b + (color100.b - color0.b) * duty / 100;
-        
-        // トランジション付きで色を設定
-        rgb_led.setColorWithTransition(i, r, g, b, config_manager->getSSRLinkTransitionTime());
-        }
-    }
-    
 // LEDステータス表示スレッド
 void led_status_thread() {
     bool blink_state = false;
@@ -408,53 +378,52 @@ void init_network() {
 
 int main()
 {
-    // Initialize serial communication
+    // シリアル通信の初期化
     pc.set_baud(115200);
     pc.set_format(8, BufferedSerial::None, 1);
     
-    // Initialize log output
-    log_printf(LOG_LEVEL_INFO, "==========================================");
-    log_printf(LOG_LEVEL_INFO, "HW-HACC2 AC Power Controller");
-    log_printf(LOG_LEVEL_INFO, "==========================================");
-    
-    // Display system information
-    log_printf(LOG_LEVEL_INFO, "System Information:");
-    log_printf(LOG_LEVEL_INFO, "- Device: %s", MBED_STRINGIFY(TARGET_NAME));
-    log_printf(LOG_LEVEL_INFO, "- CPU: %s", MBED_STRINGIFY(TARGET_CPU));
-    log_printf(LOG_LEVEL_INFO, "- Mbed OS: %d.%d.%d", MBED_MAJOR_VERSION, MBED_MINOR_VERSION, MBED_PATCH_VERSION);
-    log_printf(LOG_LEVEL_INFO, "- Software: %s %s", DEVICE_NAME, DEVICE_VERSION);
-    log_printf(LOG_LEVEL_INFO, "- Build: %s %s", __DATE__, __TIME__);
-    log_printf(LOG_LEVEL_INFO, "------------------------------------------");
-    
-    // Initialize configuration manager
-    log_printf(LOG_LEVEL_INFO, "Initializing configuration manager...");
-    config_manager = new ConfigManager();
-    
-    // Initialize network manager
-    network_manager = new NetworkManager(config_manager);
-    
-    // Initialize UDP controller
-    udp_controller = new UDPController(ssr, rgb_led, config_manager);
-    
-    // LED initialization (all off)
+    // システムステータスLEDの初期化
     led_r = 0;
     led_g = 0;
     led_b = 0;
     
-    // Set initializing status
-    update_status_led(STATUS_INITIALIZING);
-        
-    // Initialize ConfigManager (EEPROM only)
-    log_printf(LOG_LEVEL_DEBUG, "Creating ConfigManager...");
-    bool config_loaded = config_manager->loadConfig(true);
-    log_printf(LOG_LEVEL_DEBUG, "Config load result: %s", config_loaded ? "true" : "false");
+    // ステータスLED表示スレッドの開始
+    Thread led_thread(osPriorityNormal, 1024);
+    led_thread.start(led_status_thread);
     
-    if (config_manager->usedDefaultConfig()) {
-        log_printf(LOG_LEVEL_WARN, "EEPROM invalid, loaded default config");
-    } else if (config_loaded) {
-        log_printf(LOG_LEVEL_INFO, "Config file: Loaded successfully");
+    // システムステータスを初期化中に設定
+    update_status_led(STATUS_INITIALIZING);
+    
+    // Initialize configuration manager
+    log_printf(LOG_LEVEL_INFO, "Initializing configuration manager...");
+    config_manager = std::make_unique<ConfigManager>();
+    
+    // Initialize RGB LED driver with config manager
+    log_printf(LOG_LEVEL_INFO, "Initializing RGB LED driver...");
+    rgb_led = std::make_unique<RGBLEDDriver>(ssr, config_manager.get());
+    
+    // Initialize network manager
+    log_printf(LOG_LEVEL_INFO, "Initializing network manager...");
+    network_manager = std::make_unique<NetworkManager>(config_manager.get());
+    
+    // Initialize UDP controller
+    log_printf(LOG_LEVEL_INFO, "Initializing UDP controller...");
+    udp_controller = std::make_unique<UDPController>(ssr, *rgb_led, config_manager.get());
+    
+    // Update serial controller with config manager and drivers
+    log_printf(LOG_LEVEL_INFO, "Configuring serial controller...");
+    serial_controller.set_config_manager(config_manager.get());
+    serial_controller.set_rgb_led_driver(rgb_led.get());
+    
+    // Load configuration from EEPROM
+    log_printf(LOG_LEVEL_DEBUG, "Loading configuration from EEPROM...");
+    bool config_loaded = config_manager->loadConfig(true);
+    if (!config_loaded) {
+        log_printf(LOG_LEVEL_WARN, "Failed to load config from EEPROM, using default settings");
+    } else if (config_manager->usedDefaultConfig()) {
+        log_printf(LOG_LEVEL_WARN, "EEPROM data invalid, using default settings");
     } else {
-        log_printf(LOG_LEVEL_ERROR, "Config file: Load failed");
+        log_printf(LOG_LEVEL_INFO, "Configuration loaded successfully");
     }
     
     // MACアドレスはEEPROMから自動的に読み込まれ、mbed_mac_address関数で設定される
@@ -510,11 +479,7 @@ int main()
     // Set UDP controller callbacks
     udp_controller->setPacketCallback(packet_received);
     udp_controller->setCommandCallback(command_executed);
-    udp_controller->setConfigManager(config_manager);
-    
-    // Set serial controller callbacks
-    serial_controller.set_command_callback(command_executed);
-    serial_controller.set_config_manager(config_manager);
+    udp_controller->setConfigManager(config_manager.get());
     
     // Start command processing loop
     log_printf(LOG_LEVEL_INFO, "Starting command processing...");
@@ -534,11 +499,6 @@ int main()
     
     // Main thread handles LED updates
     while (true) {
-        // Update LEDs
-        if (config_manager->isSSRLinkEnabled()) {
-            update_led_colors();
-        }
-        
         // Add short wait time to reduce CPU usage
         wait_us(10000);  // 10ms wait
     }

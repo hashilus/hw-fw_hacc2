@@ -31,7 +31,7 @@ class UDPController {
 public:
     UDPController(SSRDriver& ssr_driver, RGBLEDDriver& rgb_led_driver, ConfigManager* config_manager);
     ~UDPController();
-
+    
     // 初期化と実行
     bool init(NetworkInterface* interface);
     bool run();
@@ -44,7 +44,7 @@ public:
     void setConfigManager(ConfigManager* config_manager) {
         _config_manager = config_manager;
     }
-
+    
 private:
     // スレッド関連
     Thread _thread;
@@ -95,6 +95,6 @@ private:
     bool _mist_active;
     uint32_t _mist_start_time;
     uint32_t _mist_duration;
-
+    
     NetworkInterface* _interface;
 }; 

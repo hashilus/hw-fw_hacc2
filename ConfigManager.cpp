@@ -13,7 +13,13 @@ char ConfigManager::_netmask_buffer[16];
 char ConfigManager::_gateway_buffer[16];
 
 ConfigManager::ConfigManager() {
-    // createDefaultConfig();
+    // まずEEPROMから設定を読み込む
+    if (!loadConfig(true)) {
+        log_printf(LOG_LEVEL_INFO, "Creating default configuration...");
+        createDefaultConfig();
+    } else {
+        log_printf(LOG_LEVEL_INFO, "Configuration loaded successfully from EEPROM");
+    }
 }
 
 ConfigManager::~ConfigManager() {
@@ -47,15 +53,24 @@ bool ConfigManager::loadConfig(bool create_if_not_exist) {
         if (p[i] != 0xFF) all_ff = false;
     }
     log_printf(LOG_LEVEL_DEBUG, "Data check: all_zero=%d, all_ff=%d", all_zero, all_ff);
+
+    // EEPROMのデータを表示
+    log_printf(LOG_LEVEL_DEBUG, "EEPROM Data:");
+    log_printf(LOG_LEVEL_DEBUG, "SSR-LED Link: %s", _data.ssr_link_enabled ? "Enabled" : "Disabled");
+    log_printf(LOG_LEVEL_DEBUG, "Transition Time: %d ms", _data.ssr_link_transition_ms);
     
-    if (all_zero || all_ff) {
-        log_printf(LOG_LEVEL_WARN, "Invalid data detected (all zeros or all 0xFF)");
-        createDefaultConfig();
-        _used_default = true;
-        if (create_if_not_exist) {
-            return saveConfig();
-        }
-        return false;
+    for (int i = 0; i < 3; i++) {
+        log_printf(LOG_LEVEL_DEBUG, "LED%d 0%%: R=%d G=%d B=%d", 
+            i + 1,
+            _data.ssr_link_colors_0[i].r,
+            _data.ssr_link_colors_0[i].g,
+            _data.ssr_link_colors_0[i].b);
+            
+        log_printf(LOG_LEVEL_DEBUG, "LED%d 100%%: R=%d G=%d B=%d", 
+            i + 1,
+            _data.ssr_link_colors_100[i].r,
+            _data.ssr_link_colors_100[i].g,
+            _data.ssr_link_colors_100[i].b);
     }
 
     // バージョン番号のチェック
@@ -165,7 +180,7 @@ void ConfigManager::createDefaultConfig() {
     _data.debug_level = 1;  // デフォルトはINFOレベル
     
     // SSR-LED連動設定
-    _data.ssr_link_enabled = false;
+    _data.ssr_link_enabled = true;  // デフォルトで有効化
     _data.ssr_link_transition_ms = 1000;  // デフォルトは1秒
     
     // 各LEDの色設定

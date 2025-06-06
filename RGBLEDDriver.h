@@ -2,6 +2,8 @@
 #define RGB_LED_DRIVER_H
 
 #include "mbed.h"
+#include "SSRDriver.h"
+#include "ConfigManager.h"
 
 /**
  * RGB LED Driver Class
@@ -11,6 +13,8 @@ class RGBLEDDriver {
 public:
     /**
      * Constructor
+     * @param ssr_driver Reference to SSR driver
+     * @param config_manager Pointer to config manager
      * @param rgb1_r_pin RGB1 red pin number
      * @param rgb1_g_pin RGB1 green pin number
      * @param rgb1_b_pin RGB1 blue pin number
@@ -21,7 +25,8 @@ public:
      * @param rgb3_g_pin RGB3 green pin number
      * @param rgb3_b_pin RGB3 blue pin number
      */
-    RGBLEDDriver(PinName rgb1_r_pin = P8_14, PinName rgb1_g_pin = P3_2, PinName rgb1_b_pin = P8_15,
+    RGBLEDDriver(SSRDriver& ssr_driver, ConfigManager* config_manager,
+                PinName rgb1_r_pin = P8_14, PinName rgb1_g_pin = P3_2, PinName rgb1_b_pin = P8_15,
                 PinName rgb2_r_pin = P8_13, PinName rgb2_g_pin = P8_11, PinName rgb2_b_pin = P4_4,
                 PinName rgb3_r_pin = P4_6, PinName rgb3_g_pin = P4_5, PinName rgb3_b_pin = P4_7);
     
@@ -55,16 +60,16 @@ public:
     /**
      * Get the current color of the specified RGB LED
      * @param id RGB LED number (1-3)
-     * @param r Pointer to variable to store red intensity
-     * @param g Pointer to variable to store green intensity
-     * @param b Pointer to variable to store blue intensity
+     * @param r Pointer to store red intensity (0-255)
+     * @param g Pointer to store green intensity (0-255)
+     * @param b Pointer to store blue intensity (0-255)
      * @return true if successful, false if failed
      */
     bool getColor(uint8_t id, uint8_t* r, uint8_t* g, uint8_t* b);
     
     /**
-     * Set PWM period
-     * @param period_us Period (microseconds)
+     * Set the PWM period for all RGB LEDs
+     * @param period_us Period in microseconds
      */
     void setPeriod(uint32_t period_us);
 
@@ -84,6 +89,14 @@ public:
      * 定期的に呼び出す必要がある
      */
     void updateTransitions();
+
+    /**
+     * Set the configuration manager
+     * @param config_manager Pointer to the configuration manager
+     */
+    void setConfigManager(ConfigManager* config_manager) {
+        _config_manager = config_manager;
+    }
 
 private:
     // RGB LED control PWM pins
@@ -111,7 +124,22 @@ private:
     Transition _transitions[3];
 
     // トランジションの更新間隔（ミリ秒）
-    static const uint32_t TRANSITION_UPDATE_INTERVAL_MS = 20;  // 50Hz
+    static const uint32_t TRANSITION_UPDATE_INTERVAL_MS = 10;  // 100Hz
+
+    // スレッド関連のメンバー
+    Thread _transition_thread;
+    bool _thread_running;
+    EventQueue _event_queue;
+
+    // SSRドライバーとコンフィグマネージャーの参照
+    SSRDriver& _ssr_driver;
+    ConfigManager* _config_manager;
+
+    // トランジション更新用のスレッド関数
+    void transitionThreadFunc();
+
+    // SSRの状態に基づいてLEDの色を更新
+    void updateSSRLinkColors();
 };
 
 #endif // RGB_LED_DRIVER_H 

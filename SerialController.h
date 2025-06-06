@@ -71,6 +71,22 @@ public:
         _config_manager = config_manager;
     }
 
+    /**
+     * SSRドライバを設定
+     * @param ssr_driver SSRドライバへのポインタ
+     */
+    void set_ssr_driver(SSRDriver* ssr_driver) {
+        _ssr_driver = ssr_driver;
+    }
+    
+    /**
+     * RGB LEDドライバを設定
+     * @param rgb_led_driver RGB LEDドライバへのポインタ
+     */
+    void set_rgb_led_driver(RGBLEDDriver* rgb_led_driver) {
+        _rgb_led_driver = rgb_led_driver;
+    }
+
 private:
     BufferedSerial& _pc;
     ConfigManager* _config_manager;

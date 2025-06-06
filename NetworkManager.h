@@ -37,4 +37,4 @@ private:
 
     void _update_network_info();
     void _thread_func();
-}; 
+};

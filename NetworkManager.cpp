@@ -79,15 +79,15 @@ bool NetworkManager::set_network(const uint8_t* ip, const uint8_t* netmask, cons
     
     // IPアドレスを文字列に変換（ホストバイトオーダー）
     snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d",
-        ip[0], ip[1], ip[2], ip[3]);
+             ip[0], ip[1], ip[2], ip[3]);
     
     // サブネットマスクを文字列に変換（ホストバイトオーダー）
     snprintf(mask_str, sizeof(mask_str), "%d.%d.%d.%d",
-        netmask[0], netmask[1], netmask[2], netmask[3]);
+             netmask[0], netmask[1], netmask[2], netmask[3]);
     
     // ゲートウェイを文字列に変換（ホストバイトオーダー）
     snprintf(gw_str, sizeof(gw_str), "%d.%d.%d.%d",
-        gateway[0], gateway[1], gateway[2], gateway[3]);
+             gateway[0], gateway[1], gateway[2], gateway[3]);
     
     log_printf(LOG_LEVEL_INFO, "Setting static IP: %s", ip_str);
     log_printf(LOG_LEVEL_INFO, "Setting netmask: %s", mask_str);
@@ -97,7 +97,7 @@ bool NetworkManager::set_network(const uint8_t* ip, const uint8_t* netmask, cons
         log_printf(LOG_LEVEL_ERROR, "Failed to set network parameters");
         return false;
     }
-    
+
     return true;
 }
 
@@ -134,8 +134,8 @@ bool NetworkManager::connect() {
     }
     
     log_printf(LOG_LEVEL_ERROR, "Failed to connect after %d attempts", MAX_RETRIES);
-    return false;
-}
+            return false;
+        }
 
 void NetworkManager::disconnect() {
     if (!_connected) {
@@ -171,8 +171,8 @@ void NetworkManager::_update_network_info() {
     if (_interface.get_gateway(&gateway_addr) == 0) {
         strncpy(_gateway, gateway_addr.get_ip_address(), sizeof(_gateway) - 1);
         _gateway[sizeof(_gateway) - 1] = '\0';
-    }
-    
+}
+
     // Get MAC address
     const char* mac = _interface.get_mac_address();
     if (mac) {
