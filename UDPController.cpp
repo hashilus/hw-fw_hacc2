@@ -3,11 +3,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "main.h"
+#include "version.h"
 #include "netsocket/NetworkInterface.h"
 #include "netsocket/NetworkStack.h"
 #include "netsocket/SocketAddress.h"
 #include "netsocket/UDPSocket.h"
 #include "netsocket/InternetSocket.h"
+#include "mbed-os/connectivity/lwipstack/lwip/src/include/lwip/inet.h"
+#include "mbed-os/connectivity/lwipstack/lwip/src/include/lwip/ip4_addr.h"
 
 UDPController::UDPController(SSRDriver& ssr_driver, RGBLEDDriver& rgb_led_driver, ConfigManager* config_manager)
     : _ssr_driver(ssr_driver), _rgb_led_driver(rgb_led_driver), 
@@ -263,65 +266,167 @@ void UDPController::_thread_func() {
 }
 
 void UDPController::processCommand(const char* command, int length) {
-    // Call packet received callback
-    if (_packet_callback) {
-        _packet_callback(command);
+    // コマンドを小文字に変換
+    char cmd[MAX_BUFFER_SIZE];
+    strncpy(cmd, command, length);
+    cmd[length] = '\0';
+    for (char* p = cmd; *p; p++) {
+        *p = tolower(*p);
     }
-    
-    // Call command executed callback
-    if (_command_callback) {
-        _command_callback(command);
+
+    // コマンドの実行
+    if (strcmp(cmd, "help") == 0) {
+        snprintf(_send_buffer, MAX_BUFFER_SIZE, 
+            "Available commands:\n"
+            "help - Show this help\n"
+            "debug level <0-3> - Set debug level\n"
+            "debug status - Show current debug level\n"
+            "config - Show all configuration\n"
+            "config ssrlink <on/off> - Set SSR-LED link\n"
+            "config ssrlink status - Show SSR-LED link status\n"
+            "config rgb0 <led_id> <r> <g> <b> - Set LED 0%% color\n"
+            "config rgb100 <led_id> <r> <g> <b> - Set LED 100%% color\n"
+            "config trans <ms> - Set transition time\n"
+            "config load - Load configuration\n"
+            "config save - Save configuration\n"
+            "reboot - Reboot device\n"
+            "info - Show system information\n"
+            "set <channel> <duty> - Set SSR duty cycle\n"
+            "get <channel> - Get SSR duty cycle\n"
+            "rgb <led_id> <r> <g> <b> - Set RGB LED color\n"
+            "rgbget <led_id> - Get RGB LED color\n"
+            "freq <channel> <freq> - Set SSR frequency");
+        sendResponse(_send_buffer);
     }
-    
-    log_printf(LOG_LEVEL_DEBUG, "Processing command: %s", command);
-    
-    // Separate command name and arguments
-    char cmd[32] = {0};  // Buffer for command name
-    const char* args = nullptr;  // Pointer to argument part
-    
-    // Extract command name (alphabets only)
-    size_t i = 0;
-    while (i < static_cast<size_t>(length) && i < sizeof(cmd) - 1) {
-        if (isalpha(command[i])) {
-            cmd[i] = command[i];
-            i++;
+    else if (strncmp(cmd, "debug level ", 12) == 0) {
+        int level = atoi(cmd + 12);
+        if (level >= 0 && level <= 3) {
+            _config_manager->setDebugLevel(level);
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Debug level set to: %d", level);
+            sendResponse(_send_buffer);
         } else {
-            break;
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid debug level. Must be 0-3");
+            sendResponse(_send_buffer);
         }
     }
-    cmd[i] = '\0';
-    
-    // Set argument part
-    if (i < static_cast<size_t>(length)) {
-        args = &command[i];
+    else if (strcmp(cmd, "debug status") == 0) {
+        snprintf(_send_buffer, MAX_BUFFER_SIZE, "Current debug level: %d", _config_manager->getDebugLevel());
+        sendResponse(_send_buffer);
     }
-    
-    // Execute processing according to command
-    if (strcmp(cmd, "set") == 0) {
-        processSetCommand(args);
-    } else if (strcmp(cmd, "ssr") == 0) {
+    else if (strcmp(cmd, "config") == 0) {
+        // コンフィグ情報一覧を表示
+        snprintf(_send_buffer, MAX_BUFFER_SIZE,
+            "Configuration:\n"
+            "SSR-LED Link: %s\n"
+            "Transition Time: %d ms\n"
+            "Debug Level: %d",
+            _config_manager->isSSRLinkEnabled() ? "Enabled" : "Disabled",
+            _config_manager->getSSRLinkTransitionTime(),
+            _config_manager->getDebugLevel());
+        sendResponse(_send_buffer);
+    }
+    else if (strncmp(cmd, "config ssrlink ", 15) == 0) {
+        const char* value = cmd + 15;
+        if (strcmp(value, "on") == 0 || strcmp(value, "1") == 0) {
+            _config_manager->setSSRLink(true);
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR-LED link enabled");
+            sendResponse(_send_buffer);
+        } else if (strcmp(value, "off") == 0 || strcmp(value, "0") == 0) {
+            _config_manager->setSSRLink(false);
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR-LED link disabled");
+            sendResponse(_send_buffer);
+        } else if (strcmp(value, "status") == 0) {
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR-LED link is %s", 
+                _config_manager->isSSRLinkEnabled() ? "enabled" : "disabled");
+            sendResponse(_send_buffer);
+        } else {
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid command");
+            sendResponse(_send_buffer);
+        }
+    }
+    else if (strncmp(cmd, "config rgb0 ", 12) == 0) {
+        int led_id, r, g, b;
+        if (sscanf(cmd + 12, "%d,%d,%d,%d", &led_id, &r, &g, &b) == 4) {
+            if (led_id >= 1 && led_id <= 3 &&
+                r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
+                _config_manager->setSSRLinkColor0(led_id, r, g, b);
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "LED%d 0%% color set to R:%d G:%d B:%d", 
+                    led_id, r, g, b);
+                sendResponse(_send_buffer);
+            } else {
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid parameters");
+                sendResponse(_send_buffer);
+            }
+        } else {
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid command format");
+            sendResponse(_send_buffer);
+        }
+    }
+    else if (strncmp(cmd, "config rgb100 ", 14) == 0) {
+        int led_id, r, g, b;
+        if (sscanf(cmd + 14, "%d,%d,%d,%d", &led_id, &r, &g, &b) == 4) {
+            if (led_id >= 1 && led_id <= 3 &&
+                r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
+                _config_manager->setSSRLinkColor100(led_id, r, g, b);
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "LED%d 100%% color set to R:%d G:%d B:%d", 
+                    led_id, r, g, b);
+                sendResponse(_send_buffer);
+            } else {
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid parameters");
+                sendResponse(_send_buffer);
+            }
+        } else {
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid command format");
+            sendResponse(_send_buffer);
+        }
+    }
+    else if (strncmp(cmd, "config trans ", 13) == 0 || strncmp(cmd, "config t ", 10) == 0) {
+        const char* value = strncmp(cmd, "config trans ", 13) == 0 ? cmd + 13 : cmd + 10;
+        int ms = atoi(value);
+        if (ms >= 100 && ms <= 10000) {
+            _config_manager->setSSRLinkTransitionTime(ms);
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Transition time set to %d ms", ms);
+            sendResponse(_send_buffer);
+        } else {
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid transition time. Must be 100-10000 ms");
+            sendResponse(_send_buffer);
+        }
+    }
+    else if (strcmp(cmd, "config load") == 0) {
+        _config_manager->loadConfig();
+        snprintf(_send_buffer, MAX_BUFFER_SIZE, "Configuration loaded");
+        sendResponse(_send_buffer);
+    }
+    else if (strcmp(cmd, "config save") == 0) {
+        _config_manager->saveConfig();
+        snprintf(_send_buffer, MAX_BUFFER_SIZE, "Configuration saved");
+        sendResponse(_send_buffer);
+    }
+    else if (strncmp(cmd, "set ", 4) == 0) {
+        processSetCommand(cmd + 4);
+    } else if (strncmp(cmd, "ssr ", 4) == 0) {
         // SSR command is an alias for SET command
-        processSetCommand(args);
-    } else if (strcmp(cmd, "freq") == 0) {
-        processFreqCommand(args);
-    } else if (strcmp(cmd, "get") == 0) {
-        processGetCommand(args);
-    } else if (strcmp(cmd, "rgb") == 0) {
-        processRGBCommand(args);
-    } else if (strcmp(cmd, "rgbget") == 0) {
-        processRGBGetCommand(args);
-    } else if (strcmp(cmd, "sofia") == 0) {
+        processSetCommand(cmd + 4);
+    } else if (strncmp(cmd, "freq ", 5) == 0) {
+        processFreqCommand(cmd + 5);
+    } else if (strncmp(cmd, "get ", 4) == 0) {
+        processGetCommand(cmd + 4);
+    } else if (strncmp(cmd, "rgb ", 4) == 0) {
+        processRGBCommand(cmd + 4);
+    } else if (strncmp(cmd, "rgbget ", 7) == 0) {
+        processRGBGetCommand(cmd + 7);
+    } else if (strncmp(cmd, "sofia", 5) == 0) {
         processSofiaCommand();
-    } else if (strcmp(cmd, "info") == 0) {
+    } else if (strncmp(cmd, "info", 4) == 0) {
         processInfoCommand();
-    } else if (strcmp(cmd, "mist") == 0) {
-        processMistCommand(args);
-    } else if (strcmp(cmd, "air") == 0) {
-        processAirCommand(args);
+    } else if (strncmp(cmd, "mist ", 5) == 0) {
+        processMistCommand(cmd + 5);
+    } else if (strncmp(cmd, "air ", 4) == 0) {
+        processAirCommand(cmd + 4);
     } else {
         // Unknown command
-        log_printf(LOG_LEVEL_ERROR, "Unknown command: %s", command);
-        generateErrorResponse(command);
+        snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Unknown command");
+        sendResponse(_send_buffer);
     }
 }
 
@@ -539,9 +644,12 @@ void UDPController::processSofiaCommand() {
 }
 
 void UDPController::processInfoCommand() {
+    // バージョン情報を取得
+    VersionInfo version = getVersionInfo();
+    
     // Generate device information
-    snprintf(_send_buffer, MAX_BUFFER_SIZE, "info,%s,2.0.1,OK", 
-             DEVICE_NAME);
+    snprintf(_send_buffer, MAX_BUFFER_SIZE, "info,%s,%s,OK", 
+             version.device, version.version);
     
     // Send response
     sendResponse(_send_buffer);

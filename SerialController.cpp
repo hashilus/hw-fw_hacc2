@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include "main.h"
+#include "version.h"
 #include "mbed.h"
 
 // Version information
@@ -195,90 +196,6 @@ void SerialController::processCommand(const char* command) {
         handleConfigCommand("config");  // コンフィグ情報一覧を表示
     } else if (strncmp(cmd, "config ", 7) == 0) {
         handleConfigCommand(cmd + 7);
-    } else if (strncmp(cmd, "config ssrlink on/off", 21) == 0) {
-        const char* value = cmd + 21;
-        if (strcmp(value, "on") == 0 || strcmp(value, "1") == 0) {
-            _config_manager->setSSRLink(true);
-            log_printf(LOG_LEVEL_INFO, "SSR-LED link enabled");
-        } else if (strcmp(value, "off") == 0 || strcmp(value, "0") == 0) {
-            _config_manager->setSSRLink(false);
-            log_printf(LOG_LEVEL_INFO, "SSR-LED link disabled");
-        } else {
-            log_printf(LOG_LEVEL_ERROR, "Invalid value. Use 'on'/'1' or 'off'/'0'");
-        }
-    }
-    else if (strncmp(cmd, "netbios ", 8) == 0) {
-        const char* value = cmd + 8;
-        if (_config_manager->setNetBIOSName(value)) {
-            log_printf(LOG_LEVEL_INFO, "NETBIOS name set to: %s", value);
-        } else {
-            log_printf(LOG_LEVEL_ERROR, "Invalid NETBIOS name. Must be 1-15 characters");
-        }
-    }
-    else if (strcmp(cmd, "netbios") == 0) {
-        log_printf(LOG_LEVEL_INFO, "Current NETBIOS name: %s", _config_manager->getNetBIOSName());
-    }
-    else if (strncmp(cmd, "ip ", 3) == 0) {
-        const char* value = cmd + 3;
-        if (_config_manager->setIPAddress(value)) {
-            log_printf(LOG_LEVEL_INFO, "IP address set to: %s", value);
-        } else {
-            log_printf(LOG_LEVEL_ERROR, "Invalid IP address format");
-        }
-    }
-    else if (strncmp(cmd, "mask ", 5) == 0) {
-        const char* value = cmd + 5;
-        if (_config_manager->setNetmask(value)) {
-            log_printf(LOG_LEVEL_INFO, "Netmask set to: %s", value);
-        } else {
-            log_printf(LOG_LEVEL_ERROR, "Invalid netmask format");
-        }
-    }
-    else if (strncmp(cmd, "gateway ", 8) == 0) {
-        const char* value = cmd + 8;
-        if (_config_manager->setGateway(value)) {
-            log_printf(LOG_LEVEL_INFO, "Gateway set to: %s", value);
-        } else {
-            log_printf(LOG_LEVEL_ERROR, "Invalid gateway format");
-        }
-    }
-    else if (strncmp(cmd, "dhcp ", 5) == 0) {
-        const char* value = cmd + 5;
-        if (strcmp(value, "on") == 0 || strcmp(value, "1") == 0) {
-            _config_manager->setDHCPEnabled(true);
-            log_printf(LOG_LEVEL_INFO, "DHCP enabled");
-        } else if (strcmp(value, "off") == 0 || strcmp(value, "0") == 0) {
-            _config_manager->setDHCPEnabled(false);
-            log_printf(LOG_LEVEL_INFO, "DHCP disabled");
-        } else {
-            log_printf(LOG_LEVEL_ERROR, "Invalid value. Use 'on'/'1' or 'off'/'0'");
-        }
-    }
-    else if (strncmp(cmd, "rgb0 ", 5) == 0) {
-        int num, r, g, b;
-        if (sscanf(cmd + 5, "%d,%d,%d,%d", &num, &r, &g, &b) == 4) {
-            if (num >= 1 && num <= 3 && r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
-                _config_manager->setSSRLinkColor0(num, r, g, b);
-                log_printf(LOG_LEVEL_INFO, "SSR%d 0%% color set to R:%d G:%d B:%d", num, r, g, b);
-            } else {
-                log_printf(LOG_LEVEL_ERROR, "Invalid parameters");
-            }
-        } else {
-            log_printf(LOG_LEVEL_ERROR, "Invalid format. Use: rgb0 <num>,<red>,<green>,<blue>");
-        }
-    }
-    else if (strncmp(cmd, "rgb100 ", 7) == 0) {
-        int num, r, g, b;
-        if (sscanf(cmd + 7, "%d,%d,%d,%d", &num, &r, &g, &b) == 4) {
-            if (num >= 1 && num <= 3 && r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
-                _config_manager->setSSRLinkColor100(num, r, g, b);
-                log_printf(LOG_LEVEL_INFO, "SSR%d 100%% color set to R:%d G:%d B:%d", num, r, g, b);
-            } else {
-                log_printf(LOG_LEVEL_ERROR, "Invalid parameters");
-            }
-        } else {
-            log_printf(LOG_LEVEL_ERROR, "Invalid format. Use: rgb100 <num>,<red>,<green>,<blue>");
-        }
     }
     else {
         log_printf(LOG_LEVEL_ERROR, "Unknown command: %s", cmd);
@@ -309,7 +226,8 @@ void SerialController::displayHelp() {
     log_printf(LOG_LEVEL_INFO, "  config dhcp on/off   Enable/disable DHCP");
     log_printf(LOG_LEVEL_INFO, "  config rgb0 <n>,<r>,<g>,<b>  Set SSR 0%% color");
     log_printf(LOG_LEVEL_INFO, "  config rgb100 <n>,<r>,<g>,<b>  Set SSR 100%% color");
-    
+    log_printf(LOG_LEVEL_INFO, "  config trans <ms>  Set transition time (100-10000ms)");
+
     log_printf(LOG_LEVEL_INFO, "Debug:");
     log_printf(LOG_LEVEL_INFO, "  debug level <0-3>    Set debug level");
     log_printf(LOG_LEVEL_INFO, "  debug status         Show current debug level");
@@ -412,8 +330,12 @@ void SerialController::handleRGBGetCommand(const char* command) {
 }
 
 void SerialController::handleInfoCommand() {
+    // バージョン情報を取得
+    VersionInfo version = getVersionInfo();
+    
     log_printf(LOG_LEVEL_INFO, "Device Information:");
-    log_printf(LOG_LEVEL_INFO, "- Device: %s", MBED_STRINGIFY(TARGET_NAME));
+    log_printf(LOG_LEVEL_INFO, "- Device: %s", version.device);
+    log_printf(LOG_LEVEL_INFO, "- Version: %s", version.version);
     log_printf(LOG_LEVEL_INFO, "- CPU: %s", MBED_STRINGIFY(TARGET_CPU));
     log_printf(LOG_LEVEL_INFO, "- Mbed OS Version: %d.%d.%d", 
                MBED_MAJOR_VERSION, MBED_MINOR_VERSION, MBED_PATCH_VERSION);
@@ -427,6 +349,11 @@ void SerialController::handleInfoCommand() {
         log_printf(LOG_LEVEL_INFO, "- Gateway: %s", _config_manager->getGateway());
         log_printf(LOG_LEVEL_INFO, "- NETBIOS: %s", _config_manager->getNetBIOSName());
         log_printf(LOG_LEVEL_INFO, "- UDP Port: %d", _config_manager->getUDPPort());
+        
+        log_printf(LOG_LEVEL_INFO, "System Settings:");
+        log_printf(LOG_LEVEL_INFO, "- Debug Level: %d", _config_manager->getDebugLevel());
+        log_printf(LOG_LEVEL_INFO, "- SSR-LED Link: %s", _config_manager->isSSRLinkEnabled() ? "Enabled" : "Disabled");
+        log_printf(LOG_LEVEL_INFO, "- Transition Time: %d ms", _config_manager->getSSRLinkTransitionTime());
     }
 }
 
@@ -450,6 +377,7 @@ void SerialController::handleConfigCommand(const char* command) {
         log_printf(LOG_LEVEL_INFO, "- Netmask: %s", _config_manager->getNetmask());
         log_printf(LOG_LEVEL_INFO, "- Gateway: %s", _config_manager->getGateway());
         log_printf(LOG_LEVEL_INFO, "- NETBIOS: %s", _config_manager->getNetBIOSName());
+        log_printf(LOG_LEVEL_INFO, "- UDP Port: %d", _config_manager->getUDPPort());
         log_printf(LOG_LEVEL_INFO, "------------------------------------------");
         
         // SSR-LED連動設定
@@ -569,6 +497,22 @@ void SerialController::handleConfigCommand(const char* command) {
             }
         } else {
             log_printf(LOG_LEVEL_ERROR, "Invalid format. Use: rgb100 <num>,<red>,<green>,<blue>");
+        }
+    }
+    else if (strcmp(command, "load") == 0) {
+        if (_config_manager->loadConfig()) {
+            log_printf(LOG_LEVEL_INFO, "Configuration loaded successfully");
+        } else {
+            log_printf(LOG_LEVEL_ERROR, "Failed to load configuration");
+        }
+    }
+    else if (strncmp(command, "trans ", 6) == 0) {
+        int ms;
+        if (sscanf(command + 6, "%d", &ms) == 1) {
+            _config_manager->setSSRLinkTransitionTime(ms);
+            log_printf(LOG_LEVEL_INFO, "Transition time set to %d ms", ms);
+        } else {
+            log_printf(LOG_LEVEL_ERROR, "Invalid format. Use: trans <ms>");
         }
     }
     else {

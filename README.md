@@ -4,12 +4,13 @@
 HACC2は、Hashilusの空気制御システムのコントローラーです。Mbed OSを使用して実装されており、UDP経由でコマンドを受け付け、SSRとRGB LEDを制御します。
 
 ## バージョン
-- 現在のバージョン: 2.0.0
+- 現在のバージョン: 2.0.1
 - 主な変更点:
   - ネットワーク接続の安定性向上
   - パケット処理の最適化
   - バッファサイズの拡大（8KB）
   - パフォーマンス監視機能の追加
+  - バージョン情報の一元管理
 
 ## ハードウェア要件
 - Mbed対応ボード
@@ -26,16 +27,47 @@ HACC2は、Hashilusの空気制御システムのコントローラーです。M
 mbed compile -m <TARGET> -t GCC_ARM
 ```
 
-## 設定
-### ネットワーク設定
-- DHCP: デフォルトで有効
-- 静的IP: 設定可能
-- UDPポート: デフォルト5555
+## 使用方法
 
-### デバッグレベル
-- 0: エラーのみ
-- 1: 基本情報
-- 2: 詳細情報
+### UDPコマンド
+
+UDPコマンドは、デバイスのIPアドレスとポート（デフォルト: 5000）に送信します。
+
+#### 基本コマンド
+
+- `help` - コマンド一覧を表示
+- `info` - システム情報を表示
+- `config` - 現在の設定を表示
+- `config load` - 設定を読み込む
+- `config save` - 設定を保存
+
+#### SSR制御
+
+- `set <channel> <duty>` - SSRのデューティ比を設定（0-100%）
+- `get <channel>` - SSRのデューティ比を取得
+- `freq <channel> <freq>` - SSRの周波数を設定（1-100Hz）
+
+#### RGB LED制御
+
+- `rgb <led_id> <r>,<g>,<b>` - RGB LEDの色を設定（0-255）
+- `rgbget <led_id>` - RGB LEDの色を取得
+
+#### SSR-LED連動設定
+
+- `config ssrlink <on/off>` - SSR-LED連動の有効/無効を設定
+- `config ssrlink status` - SSR-LED連動の状態を表示
+- `config rgb0 <led_id>,<r>,<g>,<b>` - LEDの0%時の色を設定（led_id: 1-3）
+- `config rgb100 <led_id>,<r>,<g>,<b>` - LEDの100%時の色を設定（led_id: 1-3）
+- `config trans <ms>` - トランジション時間を設定（100-10000ms）
+
+#### デバッグ
+
+- `debug level <0-3>` - デバッグレベルを設定
+- `debug status` - 現在のデバッグレベルを表示
+
+### シリアルコマンド
+
+シリアルコマンドは、115200bpsで送信します。改行コードはLF。
 
 ## UDPコマンド仕様
 ### 基本形式

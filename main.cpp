@@ -472,6 +472,15 @@ int main()
     log_printf(LOG_LEVEL_INFO, "  air <level>            Air control (0:OFF, 1:Low, 2:High)");
     log_printf(LOG_LEVEL_INFO, "  sofia                  Cute Sofia");
     log_printf(LOG_LEVEL_INFO, "  info                   Display device information");
+    log_printf(LOG_LEVEL_INFO, "  config                 Display configuration");
+    log_printf(LOG_LEVEL_INFO, "  config ssrlink <on/off> Set SSR-LED link");
+    log_printf(LOG_LEVEL_INFO, "  config ssrlink status   Show SSR-LED link status");
+    log_printf(LOG_LEVEL_INFO, "  config rgb0 <led_id> <r> <g> <b> Set LED 0%% color");
+    log_printf(LOG_LEVEL_INFO, "  config rgb100 <led_id> <r> <g> <b> Set LED 100%% color");
+    log_printf(LOG_LEVEL_INFO, "  config trans <ms>      Set transition time (100-10000ms)");
+    log_printf(LOG_LEVEL_INFO, "  config t <ms>          Short form for transition time");
+    log_printf(LOG_LEVEL_INFO, "  config save             Save configuration");
+    log_printf(LOG_LEVEL_INFO, "  config load             Load configuration");
     log_printf(LOG_LEVEL_INFO, "------------------------------------------");
     
     log_printf(LOG_LEVEL_INFO, "System initialization completed");
