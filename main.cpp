@@ -292,7 +292,7 @@ void init_network() {
             char gw_str[16];
             
             // IPアドレスを文字列に変換
-            snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d",
+            snprintf(ip_str, sizeof(ip_str), "%ld.%ld.%ld.%ld",
                 ip & 0xFF,
                 (ip >> 8) & 0xFF,
                 (ip >> 16) & 0xFF,
@@ -300,7 +300,7 @@ void init_network() {
             );
             
             // サブネットマスクを文字列に変換
-            snprintf(mask_str, sizeof(mask_str), "%d.%d.%d.%d",
+            snprintf(mask_str, sizeof(mask_str), "%ld.%ld.%ld.%ld",
                 mask & 0xFF,
                 (mask >> 8) & 0xFF,
                 (mask >> 16) & 0xFF,
@@ -308,7 +308,7 @@ void init_network() {
             );
             
             // ゲートウェイを文字列に変換
-            snprintf(gw_str, sizeof(gw_str), "%d.%d.%d.%d",
+            snprintf(gw_str, sizeof(gw_str), "%ld.%ld.%ld.%ld",
                 gw & 0xFF,
                 (gw >> 8) & 0xFF,
                 (gw >> 16) & 0xFF,

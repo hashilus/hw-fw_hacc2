@@ -59,7 +59,7 @@ bool ConfigManager::loadConfig(bool create_if_not_exist) {
     log_printf(LOG_LEVEL_DEBUG, "SSR-LED Link: %s", _data.ssr_link_enabled ? "Enabled" : "Disabled");
     log_printf(LOG_LEVEL_DEBUG, "Transition Time: %d ms", _data.ssr_link_transition_ms);
     
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         log_printf(LOG_LEVEL_DEBUG, "LED%d 0%%: R=%d G=%d B=%d", 
             i + 1,
             _data.ssr_link_colors_0[i].r,
@@ -184,7 +184,7 @@ void ConfigManager::createDefaultConfig() {
     _data.ssr_link_transition_ms = 1000;  // デフォルトは1秒
     
     // 各LEDの色設定
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         // 0%時の色（青）
         _data.ssr_link_colors_0[i].r = 0;
         _data.ssr_link_colors_0[i].g = 0;
@@ -270,7 +270,7 @@ bool ConfigManager::isSSRLinkEnabled() const {
 }
 
 void ConfigManager::setSSRLinkColor0(int led_id, uint8_t r, uint8_t g, uint8_t b) {
-    if (led_id >= 1 && led_id <= 3) {
+    if (led_id >= 1 && led_id <= 4) {
         _data.ssr_link_colors_0[led_id-1].r = r;
         _data.ssr_link_colors_0[led_id-1].g = g;
         _data.ssr_link_colors_0[led_id-1].b = b;
@@ -278,7 +278,7 @@ void ConfigManager::setSSRLinkColor0(int led_id, uint8_t r, uint8_t g, uint8_t b
 }
 
 void ConfigManager::setSSRLinkColor100(int led_id, uint8_t r, uint8_t g, uint8_t b) {
-    if (led_id >= 1 && led_id <= 3) {
+    if (led_id >= 1 && led_id <= 4) {
         _data.ssr_link_colors_100[led_id-1].r = r;
         _data.ssr_link_colors_100[led_id-1].g = g;
         _data.ssr_link_colors_100[led_id-1].b = b;
@@ -286,21 +286,21 @@ void ConfigManager::setSSRLinkColor100(int led_id, uint8_t r, uint8_t g, uint8_t
 }
 
 RGBColorData ConfigManager::getSSRLinkColor0(int led_id) const {
-    if (led_id >= 1 && led_id <= 3) {
+    if (led_id >= 1 && led_id <= 4) {
         return _data.ssr_link_colors_0[led_id-1];
     }
     return {0, 0, 0};
 }
 
 RGBColorData ConfigManager::getSSRLinkColor100(int led_id) const {
-    if (led_id >= 1 && led_id <= 3) {
+    if (led_id >= 1 && led_id <= 4) {
         return _data.ssr_link_colors_100[led_id-1];
     }
     return {0, 0, 0};
 }
 
 RGBColorData ConfigManager::calculateLEDColorForSSR(int led_id, int duty) const {
-    if (!_data.ssr_link_enabled || led_id < 1 || led_id > 3) {
+    if (!_data.ssr_link_enabled || led_id < 1 || led_id > 4) {
         return {0, 0, 0};  // 連動無効時または無効なLED IDは消灯
     }
     
@@ -404,7 +404,7 @@ void ConfigManager::printSSRLinkConfig() const {
     log_printf(LOG_LEVEL_INFO, "Link: %s", _data.ssr_link_enabled ? "Enabled" : "Disabled");
     log_printf(LOG_LEVEL_INFO, "Transition Time: %d ms", _data.ssr_link_transition_ms);
     
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         log_printf(LOG_LEVEL_INFO, "LED%d 0%%: R=%d G=%d B=%d", 
             i + 1,
             _data.ssr_link_colors_0[i].r,

@@ -24,11 +24,15 @@ public:
      * @param rgb3_r_pin RGB3 red pin number
      * @param rgb3_g_pin RGB3 green pin number
      * @param rgb3_b_pin RGB3 blue pin number
+     * @param rgb4_r_pin RGB4 red pin number
+     * @param rgb4_g_pin RGB4 green pin number
+     * @param rgb4_b_pin RGB4 blue pin number
      */
     RGBLEDDriver(SSRDriver& ssr_driver, ConfigManager* config_manager,
                 PinName rgb1_r_pin = P8_14, PinName rgb1_g_pin = P3_2, PinName rgb1_b_pin = P8_15,
                 PinName rgb2_r_pin = P8_13, PinName rgb2_g_pin = P8_11, PinName rgb2_b_pin = P4_4,
-                PinName rgb3_r_pin = P4_6, PinName rgb3_g_pin = P4_5, PinName rgb3_b_pin = P4_7);
+                PinName rgb3_r_pin = P4_6,  PinName rgb3_g_pin = P4_5,  PinName rgb3_b_pin = P4_7,
+                PinName rgb4_r_pin = P3_10, PinName rgb4_g_pin = P3_8,  PinName rgb4_b_pin = P3_11);
     
     /**
      * Destructor
@@ -37,7 +41,7 @@ public:
     
     /**
      * Set the color of the specified RGB LED
-     * @param id RGB LED number (1-3)
+     * @param id RGB LED number (1-4)
      * @param r Red intensity (0-255)
      * @param g Green intensity (0-255)
      * @param b Blue intensity (0-255)
@@ -47,7 +51,7 @@ public:
     
     /**
      * Turn off the specified RGB LED
-     * @param id RGB LED number (1-3)
+     * @param id RGB LED number (1-4)
      * @return true if successful, false if failed
      */
     bool turnOff(uint8_t id);
@@ -59,7 +63,7 @@ public:
     
     /**
      * Get the current color of the specified RGB LED
-     * @param id RGB LED number (1-3)
+     * @param id RGB LED number (1-4)
      * @param r Pointer to store red intensity (0-255)
      * @param g Pointer to store green intensity (0-255)
      * @param b Pointer to store blue intensity (0-255)
@@ -75,7 +79,7 @@ public:
 
     /**
      * 色を滑らかに変化させる
-     * @param id RGB LED number (1-3)
+     * @param id RGB LED number (1-4)
      * @param target_r 目標の赤色値 (0-255)
      * @param target_g 目標の緑色値 (0-255)
      * @param target_b 目標の青色値 (0-255)
@@ -100,10 +104,10 @@ public:
 
 private:
     // RGB LED control PWM pins
-    PwmOut* _rgb_pins[3][3]; // [LED number][color (R,G,B)]
+    PwmOut* _rgb_pins[4][3]; // [LED number][color (R,G,B)]
     
     // Current color state
-    uint8_t _colors[3][3]; // [LED number][color (R,G,B)]
+    uint8_t _colors[4][3]; // [LED number][color (R,G,B)]
     
     // PWM period (microseconds)
     uint32_t _period_us;
@@ -121,7 +125,7 @@ private:
     };
 
     // 各LEDのトランジション状態
-    Transition _transitions[3];
+    Transition _transitions[4];
 
     // トランジションの更新間隔（ミリ秒）
     static const uint32_t TRANSITION_UPDATE_INTERVAL_MS = 10;  // 100Hz

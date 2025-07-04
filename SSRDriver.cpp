@@ -1,11 +1,35 @@
 #include "SSRDriver.h"
+#include "mbed-os/targets/TARGET_RENESAS/TARGET_RZ_A1XX/TARGET_RZ_A1H/device/inc/iodefines/mtu2_iodefine.h"
+#include "mbed-os/targets/TARGET_RENESAS/TARGET_RZ_A1XX/TARGET_RZ_A1H/device/inc/iobitmasks/mtu2_iobitmask.h"
+#include "mbed.h"
 
-SSRDriver::SSRDriver(PinName ssr1_pin, PinName ssr2_pin, PinName ssr3_pin, PinName ssr4_pin) {
+// MTU0 TGRA interrupt number
+#define MTU0_TGIA_IRQn  0x40  // MTU0 TGRA interrupt number
+
+// Interrupt vector table
+typedef void (*IRQHandler)(void);
+IRQHandler g_interrupt_handlers[256] = {0};
+
+// Global pointer to SSRDriver instance
+static SSRDriver* g_ssr_driver = nullptr;
+
+// MTU0 TGRA interrupt handler
+extern "C" void MTU0_TGIA_IRQHandler(void) {
+    if (g_ssr_driver) {
+        g_ssr_driver->captureInterruptHandler();
+    }
+    // Clear interrupt flag
+    MTU2.TSR_0 = 0x00;  // Clear TGFA bit
+}
+
+SSRDriver::SSRDriver(PinName ssr1, PinName ssr2, PinName ssr3, PinName ssr4)
+    : _pwm1(ssr1), _pwm2(ssr2), _pwm3(ssr3), _pwm4(ssr4),
+      _freq_timer() {
     // Pin configuration
-    _ssr[0] = new DigitalOut(ssr1_pin);
-    _ssr[1] = new DigitalOut(ssr2_pin);
-    _ssr[2] = new DigitalOut(ssr3_pin);
-    _ssr[3] = new DigitalOut(ssr4_pin);
+    _ssr[0] = new DigitalOut(ssr1);
+    _ssr[1] = new DigitalOut(ssr2);
+    _ssr[2] = new DigitalOut(ssr3);
+    _ssr[3] = new DigitalOut(ssr4);
     
     // Initialize
     for (int i = 0; i < 4; i++) {
@@ -21,6 +45,40 @@ SSRDriver::SSRDriver(PinName ssr1_pin, PinName ssr2_pin, PinName ssr3_pin, PinNa
     // Set default PWM frequency to 1Hz
     _pwm_frequency_hz = 1;
     _pwm_period_ms = 1000; // 1Hz = 1000ms
+    
+    // Initialize frequency measurement
+    _freq_measure.index = 0;
+    _freq_measure.last_capture = 0;
+    _freq_measure.frequency = 0;
+    _freq_measure.buffer_full = false;
+    
+    // Initialize frequency measurement timer
+    _freq_timer.start();
+    
+    // Configure MTU0 for input capture
+    // Stop timer
+    MTU2.TCR_0 = 0;
+    
+    // Set normal mode
+    MTU2.TMDR_0 = MTU_TMDR_MD_NORMAL;
+    
+    // Configure input capture on rising edge
+    MTU2.TIORH_0 = MTU_TIOR_IOA_INPUT;
+    
+    // Enable TGRA interrupt
+    MTU2.TIER_0 = MTU_TIER_TGIEA;
+    
+    // Clear interrupt flags
+    MTU2.TSR_0 = MTU_TSR_TGFA;
+    
+    // Set prescaler to PCLK/1
+    MTU2.TCR_0 = 0x00;  // Set prescaler to PCLK/1
+    
+    // Register interrupt handler
+    g_ssr_driver = this;
+    
+    // Start timer
+    MTU2.TCR_0 |= 0x01;  // Start timer
     
     // Start timer
     updateTimer();
@@ -216,4 +274,57 @@ void SSRDriver::timerCallback() {
             }
         }
     }
+}
+
+uint32_t SSRDriver::getPowerLineFrequency() {
+    return _freq_measure.frequency;
+}
+
+void SSRDriver::captureInterruptHandler() {
+    uint32_t current_time = _freq_timer.read_us();
+    
+    if (_freq_measure.last_capture != 0) {
+        uint32_t interval = current_time - _freq_measure.last_capture;
+        _freq_measure.buffer[_freq_measure.index] = interval;
+        _freq_measure.index++;
+        
+        if (_freq_measure.index >= 256) {
+            _freq_measure.index = 0;
+            _freq_measure.buffer_full = true;
+            calculateFrequency();
+        }
+    }
+    
+    _freq_measure.last_capture = current_time;
+}
+
+void SSRDriver::calculateFrequency() {
+    if (!_freq_measure.buffer_full) {
+        return;
+    }
+    
+    // Create a temporary buffer for sorting
+    uint32_t temp_buffer[256];
+    memcpy(temp_buffer, _freq_measure.buffer, sizeof(_freq_measure.buffer));
+    
+    // Sort the buffer (using insertion sort for simplicity)
+    for (int i = 1; i < 256; i++) {
+        uint32_t key = temp_buffer[i];
+        int j = i - 1;
+        
+        while (j >= 0 && temp_buffer[j] > key) {
+            temp_buffer[j + 1] = temp_buffer[j];
+            j--;
+        }
+        temp_buffer[j + 1] = key;
+    }
+    
+    // Calculate average excluding top and bottom 10%
+    uint32_t sum = 0;
+    for (int i = 26; i < 230; i++) {
+        sum += temp_buffer[i];
+    }
+    
+    // Calculate frequency (convert from microseconds to Hz)
+    _freq_measure.frequency = 1000000 * 204 / sum;
 } 

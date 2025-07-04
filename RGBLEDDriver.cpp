@@ -4,7 +4,8 @@
 RGBLEDDriver::RGBLEDDriver(SSRDriver& ssr_driver, ConfigManager* config_manager,
                           PinName rgb1_r_pin, PinName rgb1_g_pin, PinName rgb1_b_pin,
                           PinName rgb2_r_pin, PinName rgb2_g_pin, PinName rgb2_b_pin,
-                          PinName rgb3_r_pin, PinName rgb3_g_pin, PinName rgb3_b_pin)
+                          PinName rgb3_r_pin, PinName rgb3_g_pin, PinName rgb3_b_pin,
+                          PinName rgb4_r_pin, PinName rgb4_g_pin, PinName rgb4_b_pin)
     : _thread_running(false), _ssr_driver(ssr_driver), _config_manager(config_manager) {
     // Initialize RGB LED pins
     _rgb_pins[0][0] = new PwmOut(rgb1_r_pin);
@@ -18,12 +19,16 @@ RGBLEDDriver::RGBLEDDriver(SSRDriver& ssr_driver, ConfigManager* config_manager,
     _rgb_pins[2][0] = new PwmOut(rgb3_r_pin);
     _rgb_pins[2][1] = new PwmOut(rgb3_g_pin);
     _rgb_pins[2][2] = new PwmOut(rgb3_b_pin);
+
+    _rgb_pins[3][0] = new PwmOut(rgb4_r_pin);
+    _rgb_pins[3][1] = new PwmOut(rgb4_g_pin);
+    _rgb_pins[3][2] = new PwmOut(rgb4_b_pin);
     
     // Initial settings
     _period_us = DEFAULT_PERIOD_US;
     
     // Initialize: turn off all LEDs and set PWM period
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 3; j++) {
             _rgb_pins[i][j]->period_us(_period_us);
             _rgb_pins[i][j]->write(0.0f);
@@ -32,7 +37,7 @@ RGBLEDDriver::RGBLEDDriver(SSRDriver& ssr_driver, ConfigManager* config_manager,
     }
 
     // トランジション状態の初期化
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         _transitions[i].active = false;
         _transitions[i].start_r = 0;
         _transitions[i].start_g = 0;
@@ -57,7 +62,7 @@ RGBLEDDriver::~RGBLEDDriver() {
     }
 
     // Free memory
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 3; j++) {
             delete _rgb_pins[i][j];
         }
@@ -66,7 +71,7 @@ RGBLEDDriver::~RGBLEDDriver() {
 
 bool RGBLEDDriver::setColor(uint8_t id, uint8_t r, uint8_t g, uint8_t b) {
     // Check id
-    if (id < 1 || id > 3) {
+    if (id < 1 || id > 4) {
         return false;
     }
     
@@ -88,7 +93,7 @@ bool RGBLEDDriver::setColor(uint8_t id, uint8_t r, uint8_t g, uint8_t b) {
 
 bool RGBLEDDriver::turnOff(uint8_t id) {
     // Check id
-    if (id < 1 || id > 3) {
+    if (id < 1 || id > 4) {
         return false;
     }
     
@@ -98,14 +103,14 @@ bool RGBLEDDriver::turnOff(uint8_t id) {
 
 void RGBLEDDriver::allOff() {
     // Turn off all LEDs
-    for (uint8_t i = 1; i <= 3; i++) {
+    for (uint8_t i = 1; i <= 4; i++) {
         turnOff(i);
     }
 }
 
 bool RGBLEDDriver::getColor(uint8_t id, uint8_t* r, uint8_t* g, uint8_t* b) {
     // Check id
-    if (id < 1 || id > 3) {
+    if (id < 1 || id > 4) {
         return false;
     }
     
@@ -130,7 +135,7 @@ void RGBLEDDriver::setPeriod(uint32_t period_us) {
     _period_us = period_us;
     
     // Set new period for all PWM pins
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 3; j++) {
             _rgb_pins[i][j]->period_us(_period_us);
         }
@@ -139,7 +144,7 @@ void RGBLEDDriver::setPeriod(uint32_t period_us) {
 
 bool RGBLEDDriver::setColorWithTransition(uint8_t id, uint8_t target_r, uint8_t target_g, uint8_t target_b, uint16_t transition_ms) {
     // Check id
-    if (id < 1 || id > 3) {
+    if (id < 1 || id > 4) {
         return false;
     }
     
@@ -182,7 +187,7 @@ void RGBLEDDriver::updateSSRLinkColors() {
         last_duty = duty;
         
         // 各RGB LEDに対して、SSR1の出力に応じて色を更新
-        for (int i = 1; i <= 3; i++) {
+        for (int i = 1; i <= 4; i++) {
             // 0%と100%の色を取得
             RGBColorData color0 = _config_manager->getSSRLinkColor0(i);
             RGBColorData color100 = _config_manager->getSSRLinkColor100(i);
@@ -208,7 +213,7 @@ void RGBLEDDriver::transitionThreadFunc() {
         uint32_t current_time = us_ticker_read() / 1000;  // 現在時刻（ミリ秒）
         
         // トランジションの更新
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             if (!_transitions[i].active) continue;
             
             Transition& t = _transitions[i];

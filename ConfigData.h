@@ -24,8 +24,8 @@ struct ConfigData {
     uint32_t gateway;               // デフォルトゲートウェイ（ネットワークバイトオーダー）
 
     // 3バイトのメンバーをまとめる
-    RGBColorData ssr_link_colors_0[3];  // 0%時の色（各LED）
-    RGBColorData ssr_link_colors_100[3];// 100%時の色（各LED）
+    RGBColorData ssr_link_colors_0[4];  // 0%時の色（各LED, 1-4）
+    RGBColorData ssr_link_colors_100[4];// 100%時の色（各LED, 1-4）
 
     // 16バイトのメンバー
     char netbios_name[16];          // NETBIOS名（最大15文字 + 終端文字）

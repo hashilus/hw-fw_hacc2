@@ -211,8 +211,8 @@ void SerialController::displayHelp() {
     log_printf(LOG_LEVEL_INFO, "  get <num>            Get current settings");
     
     log_printf(LOG_LEVEL_INFO, "RGB LED Control:");
-    log_printf(LOG_LEVEL_INFO, "  rgb <num>,<r>,<g>,<b>  Set RGB LED color (0-255)");
-    log_printf(LOG_LEVEL_INFO, "  rgbget <num>         Get RGB LED color");
+    log_printf(LOG_LEVEL_INFO, "  rgb <num>,<r>,<g>,<b>  Set RGB LED color (0-255, num=1-4)");
+    log_printf(LOG_LEVEL_INFO, "  rgbget <num>         Get RGB LED color (num=1-4)");
     
     log_printf(LOG_LEVEL_INFO, "Configuration:");
     log_printf(LOG_LEVEL_INFO, "  config               Display all configuration");
@@ -297,7 +297,7 @@ void SerialController::handleGetCommand(const char* command) {
 void SerialController::handleRGBCommand(const char* command) {
     int num, r, g, b;
     if (sscanf(command, "%d,%d,%d,%d", &num, &r, &g, &b) == 4) {
-        if (num >= 1 && num <= 3 && 
+        if (num >= 1 && num <= 4 && 
             r >= 0 && r <= 255 && 
             g >= 0 && g <= 255 && 
             b >= 0 && b <= 255) {
@@ -314,7 +314,7 @@ void SerialController::handleRGBCommand(const char* command) {
 void SerialController::handleRGBGetCommand(const char* command) {
     int num;
     if (sscanf(command, "%d", &num) == 1) {
-        if (num >= 1 && num <= 3) {
+        if (num >= 1 && num <= 4) {
             uint8_t r, g, b;
             if (_rgb_led_driver->getColor(num, &r, &g, &b)) {
                 log_printf(LOG_LEVEL_INFO, "LED%d color: R:%d G:%d B:%d", num, r, g, b);
@@ -387,7 +387,7 @@ void SerialController::handleConfigCommand(const char* command) {
         
         // RGB LED色設定
         log_printf(LOG_LEVEL_INFO, "RGB LED Colors:");
-        for (int i = 1; i <= 3; i++) {
+        for (int i = 1; i <= 4; i++) {
             RGBColorData color0 = _config_manager->getSSRLinkColor0(i);
             RGBColorData color100 = _config_manager->getSSRLinkColor100(i);
             log_printf(LOG_LEVEL_INFO, "SSR%d:", i);
@@ -476,7 +476,7 @@ void SerialController::handleConfigCommand(const char* command) {
     else if (strncmp(command, "rgb0 ", 5) == 0) {
         int num, r, g, b;
         if (sscanf(command + 5, "%d,%d,%d,%d", &num, &r, &g, &b) == 4) {
-            if (num >= 1 && num <= 3 && r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
+            if (num >= 1 && num <= 4 && r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
                 _config_manager->setSSRLinkColor0(num, r, g, b);
                 log_printf(LOG_LEVEL_INFO, "SSR%d 0%% color set to R:%d G:%d B:%d", num, r, g, b);
             } else {
@@ -489,7 +489,7 @@ void SerialController::handleConfigCommand(const char* command) {
     else if (strncmp(command, "rgb100 ", 7) == 0) {
         int num, r, g, b;
         if (sscanf(command + 7, "%d,%d,%d,%d", &num, &r, &g, &b) == 4) {
-            if (num >= 1 && num <= 3 && r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
+            if (num >= 1 && num <= 4 && r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
                 _config_manager->setSSRLinkColor100(num, r, g, b);
                 log_printf(LOG_LEVEL_INFO, "SSR%d 100%% color set to R:%d G:%d B:%d", num, r, g, b);
             } else {
