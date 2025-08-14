@@ -13,11 +13,11 @@ struct ConfigData {
     bool dhcp_enabled;              // DHCP有効/無効
     uint8_t debug_level;            // デバッグレベル
     bool ssr_link_enabled;          // SSR-LED連動有効/無効
+    uint8_t ssr_pwm_frequency[4];   // SSR制御周波数（Hz）、各チャンネル毎
 
     // 2バイトのメンバーをまとめる
     uint16_t udp_port;              // UDPポート番号
     uint16_t ssr_link_transition_ms;// 色変化の時間（ミリ秒）
-    uint16_t ssr_pwm_frequency;      // SSR制御周波数（Hz）
 
     // 4バイトのメンバーをまとめる
     uint32_t ip_address;            // IPアドレス（ネットワークバイトオーダー）

@@ -41,11 +41,12 @@ static DigitalOut led_b(LED3);  // 青LED
 
 // システムステータスを表す列挙型
 enum SystemStatus {
-    STATUS_INITIALIZING,    // 初期化中（青色点滅）
+    STATUS_INITIALIZING,    // 初期化中（オレンジ色点灯）
     STATUS_READY,           // 正常動作中（緑色点灯）
-    STATUS_ERROR,           // エラー状態（赤色点滅）
+    STATUS_ERROR,           // エラー状態（オレンジ色点滅）
     STATUS_PACKET_RECEIVED, // パケット受信（紫色、一時的）
-    STATUS_COMMAND_EXEC     // コマンド実行中（オレンジ色、一時的）
+    STATUS_COMMAND_EXEC,    // コマンド実行中（オレンジ色、一時的）
+    STATUS_SSR_ACTIVE       // SSR出力中（赤色点灯）
 };
 
 // 現在のシステムステータス
@@ -136,17 +137,10 @@ void led_status_thread() {
     while (true) {
         switch (current_status) {
             case STATUS_INITIALIZING:
-                // 青色点滅
-                led_r = 0;
-                led_g = 0;
-                led_b = blink_state;
-    
-                // 500msごとに点滅
-                blink_counter++;
-                if (blink_counter >= 5) {  // 50ms x 5 = 250ms
-                    blink_state = !blink_state;
-                    blink_counter = 0;
-                }
+                // オレンジ色点灯（赤+緑、青無し）
+                led_r = 1;
+                led_g = 1;
+                led_b = 0;
                 break;
                 
             case STATUS_READY:
@@ -157,9 +151,9 @@ void led_status_thread() {
                 break;
                 
             case STATUS_ERROR:
-                // 赤色点滅
+                // オレンジ色点滅（赤+緑）
                 led_r = blink_state;
-                led_g = 0;
+                led_g = blink_state;
                 led_b = 0;
         
                 // 1秒ごとに点滅
@@ -181,6 +175,13 @@ void led_status_thread() {
                 // オレンジ色点灯（赤+緑、青無し）
                 led_r = 1;
                 led_g = 1;
+                led_b = 0;
+                break;
+                
+            case STATUS_SSR_ACTIVE:
+                // 赤色点灯
+                led_r = 1;
+                led_g = 0;
                 led_b = 0;
                 break;
         }
@@ -636,6 +637,23 @@ int main()
     while (true) {
         // SSR制御の内部状態を更新（ゼロクロス・PWM対応）
         ssr.updateControl();
+        
+        // SSR出力状態を監視
+        bool ssr_active = false;
+        for (int i = 1; i <= 4; i++) {
+            if (ssr.getDutyLevel(i) > 0) {
+                ssr_active = true;
+                break;
+            }
+        }
+        
+        // SSR出力状態に応じてステータスLEDを更新
+        if (ssr_active) {
+            update_status_led(STATUS_SSR_ACTIVE);
+        } else {
+            // SSRが出力していない場合は通常状態に戻す
+            update_status_led(STATUS_READY);
+        }
         
         // ウォッチドッグタイマーを定期的にkick（100msごと）
         watchdog_counter++;
