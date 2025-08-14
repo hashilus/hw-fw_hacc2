@@ -58,6 +58,7 @@ bool ConfigManager::loadConfig(bool create_if_not_exist) {
     log_printf(LOG_LEVEL_DEBUG, "EEPROM Data:");
     log_printf(LOG_LEVEL_DEBUG, "SSR-LED Link: %s", _data.ssr_link_enabled ? "Enabled" : "Disabled");
     log_printf(LOG_LEVEL_DEBUG, "Transition Time: %d ms", _data.ssr_link_transition_ms);
+    log_printf(LOG_LEVEL_DEBUG, "SSR PWM Frequency: %d Hz", _data.ssr_pwm_frequency);
     
     for (int i = 0; i < 4; i++) {
         log_printf(LOG_LEVEL_DEBUG, "LED%d 0%%: R=%d G=%d B=%d", 
@@ -119,6 +120,18 @@ bool ConfigManager::loadConfig(bool create_if_not_exist) {
     log_printf(LOG_LEVEL_DEBUG, "Checking debug level: %d", _data.debug_level);
     if (_data.debug_level > 3) {
         log_printf(LOG_LEVEL_WARN, "Invalid debug level: %d", _data.debug_level);
+        createDefaultConfig();
+        _used_default = true;
+        if (create_if_not_exist) {
+            return saveConfig();
+        }
+        return false;
+    }
+
+    // SSR周波数のバリデーション
+    log_printf(LOG_LEVEL_DEBUG, "Checking SSR PWM frequency: %d Hz", _data.ssr_pwm_frequency);
+    if (_data.ssr_pwm_frequency > 10) {
+        log_printf(LOG_LEVEL_WARN, "Invalid SSR PWM frequency: %d Hz", _data.ssr_pwm_frequency);
         createDefaultConfig();
         _used_default = true;
         if (create_if_not_exist) {

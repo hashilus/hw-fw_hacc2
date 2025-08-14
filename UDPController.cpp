@@ -291,7 +291,7 @@ void UDPController::processCommand(const char* command, int length) {
             "config rgb100 status <led_id> - Get LED 100%% color\n"
             "config trans <ms> - Set transition time\n"
             "config trans status - Get transition time\n"
-            "config ssr_freq <freq> - Set SSR PWM frequency\n"
+            "config ssr_freq <freq> - Set SSR PWM frequency (0-10 Hz)\n"
             "config ssr_freq status - Get SSR PWM frequency\n"
             "config ssr_freq status <id> - Get SSR PWM frequency for specific ID\n"
             "config load - Load configuration\n"
@@ -479,12 +479,12 @@ void UDPController::processCommand(const char* command, int length) {
         } else {
             // 周波数を設定するコマンド（既存）
             int freq = atoi(args);
-            if (freq >= 1 && freq <= 100) {
+            if (freq >= 0 && freq <= 10) {
                 _config_manager->setSSRPWMFrequency(freq);
                 snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR PWM frequency set to %d Hz", freq);
                 sendResponse(_send_buffer);
             } else {
-                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid frequency (1-100 Hz)");
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid frequency (0-10 Hz)");
                 sendResponse(_send_buffer);
             }
         }

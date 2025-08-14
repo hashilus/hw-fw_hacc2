@@ -543,6 +543,19 @@ int main()
     log_printf(LOG_LEVEL_INFO, "------------------------------------------");
     kick_watchdog();  // SSR-LED設定表示後にkick
     
+    // Apply SSR PWM frequency from configuration
+    log_printf(LOG_LEVEL_INFO, "Applying SSR PWM frequency from configuration...");
+    kick_watchdog();  // SSR周波数適用開始前にkick
+    
+    uint16_t saved_freq = config_manager->getSSRPWMFrequency();
+    if (ssr.setPWMFrequency(saved_freq)) {
+        log_printf(LOG_LEVEL_INFO, "- SSR PWM Frequency: %d Hz (applied)", saved_freq);
+    } else {
+        log_printf(LOG_LEVEL_WARN, "- SSR PWM Frequency: %d Hz (failed to apply, using default)", saved_freq);
+    }
+    log_printf(LOG_LEVEL_INFO, "------------------------------------------");
+    kick_watchdog();  // SSR周波数適用後にkick
+    
     // Display communication interfaces
     log_printf(LOG_LEVEL_INFO, "Communication Interfaces:");
     log_printf(LOG_LEVEL_INFO, "- UDP: Port %d", config_manager->getUDPPort());
