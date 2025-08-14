@@ -277,8 +277,9 @@ void UDPController::processCommand(const char* command, int length) {
 
     // コマンドの実行
     if (strcmp(cmd, "help") == 0) {
+        // ヘルプメッセージを2分割して送信
         snprintf(_send_buffer, MAX_BUFFER_SIZE, 
-            "Available commands:\n"
+            "Available commands (Part 1/2):\n"
             "help - Show this help\n"
             "debug level <0-3> - Set debug level\n"
             "debug status - Show current debug level\n"
@@ -295,7 +296,12 @@ void UDPController::processCommand(const char* command, int length) {
             "config ssr_freq status - Get SSR PWM frequency\n"
             "config ssr_freq status <id> - Get SSR PWM frequency for specific ID\n"
             "config load - Load configuration\n"
-            "config save - Save configuration\n"
+            "config save - Save configuration");
+        sendResponse(_send_buffer);
+        
+        // 2番目のパートを送信
+        snprintf(_send_buffer, MAX_BUFFER_SIZE,
+            "Available commands (Part 2/2):\n"
             "reboot - Reboot device\n"
             "info - Show system information\n"
             "set <channel> <duty> - Set SSR duty cycle\n"
@@ -306,7 +312,8 @@ void UDPController::processCommand(const char* command, int length) {
             "ws2812get <system> <led_id> - Get WS2812 LED color\n"
             "ws2812sys <system> <r> <g> <b> - Set WS2812 system color\n"
             "ws2812off <system> - Turn off WS2812 system\n"
-            "freq <channel> <freq> - Set SSR frequency");
+            "freq <channel> <freq> - Set SSR frequency\n"
+            "zerox - Show zero-cross detection status");
         sendResponse(_send_buffer);
     }
     else if (strncmp(cmd, "debug level ", 12) == 0) {
