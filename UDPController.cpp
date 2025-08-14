@@ -290,6 +290,9 @@ void UDPController::processCommand(const char* command, int length) {
             "config rgb100 <led_id> <r> <g> <b> - Set LED 100%% color\n"
             "config rgb100 status <led_id> - Get LED 100%% color\n"
             "config trans <ms> - Set transition time\n"
+            "config trans status - Get transition time\n"
+            "config ssr_freq <freq> - Set SSR PWM frequency\n"
+            "config ssr_freq status - Get SSR PWM frequency\n"
             "config load - Load configuration\n"
             "config save - Save configuration\n"
             "reboot - Reboot device\n"
@@ -430,15 +433,23 @@ void UDPController::processCommand(const char* command, int length) {
         }
     }
     else if (strncmp(cmd, "config trans ", 13) == 0 || strncmp(cmd, "config t ", 10) == 0) {
-        const char* value = strncmp(cmd, "config trans ", 13) == 0 ? cmd + 13 : cmd + 10;
-        int ms = atoi(value);
-        if (ms >= 100 && ms <= 10000) {
-            _config_manager->setSSRLinkTransitionTime(ms);
-            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Transition time set to %d ms", ms);
+        const char* args = strncmp(cmd, "config trans ", 13) == 0 ? cmd + 13 : cmd + 10;
+        if (strcmp(args, "status") == 0) {
+            // トランジション時間を読み取るコマンド
+            int ms = _config_manager->getSSRLinkTransitionTime();
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Transition time is %d ms", ms);
             sendResponse(_send_buffer);
         } else {
-            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid transition time. Must be 100-10000 ms");
-            sendResponse(_send_buffer);
+            // トランジション時間を設定するコマンド（既存）
+            int ms = atoi(args);
+            if (ms >= 100 && ms <= 10000) {
+                _config_manager->setSSRLinkTransitionTime(ms);
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Transition time set to %d ms", ms);
+                sendResponse(_send_buffer);
+            } else {
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid transition time. Must be 100-10000 ms");
+                sendResponse(_send_buffer);
+            }
         }
     }
     else if (strncmp(cmd, "config ssr_freq ", 16) == 0) {
