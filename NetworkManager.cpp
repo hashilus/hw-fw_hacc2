@@ -109,33 +109,64 @@ bool NetworkManager::connect() {
     
     log_printf(LOG_LEVEL_INFO, "Connecting to network...");
     
+    // ネットワークインターフェースの状態を確認
+    nsapi_connection_status_t status = _interface.get_connection_status();
+    log_printf(LOG_LEVEL_DEBUG, "Current network status: %d", status);
+    
+    // 既に接続されている場合は切断
+    if (status != NSAPI_STATUS_DISCONNECTED) {
+        log_printf(LOG_LEVEL_INFO, "Disconnecting existing connection...");
+        _interface.disconnect();
+        ThisThread::sleep_for(3s);  // 3秒待機してハードウェアをリセット
+    }
+    
     // 接続試行回数の制限
-    const int MAX_RETRIES = 3;
+    const int MAX_RETRIES = 5;
     int retry_count = 0;
     
     while (retry_count < MAX_RETRIES) {
+        log_printf(LOG_LEVEL_INFO, "Connection attempt %d/%d", retry_count + 1, MAX_RETRIES);
+        
+        // 接続前に少し待機
+        ThisThread::sleep_for(1s);
+        
         // Connect to network
-        if (_interface.connect() == 0) {
-            _connected = true;
-            _update_network_info();
+        int result = _interface.connect();
+        log_printf(LOG_LEVEL_DEBUG, "Connect result: %d", result);
+        
+        if (result == 0) {
+            // 接続成功を確認
+            ThisThread::sleep_for(2s);  // 接続完了を待機
             
-            log_printf(LOG_LEVEL_INFO, "Connected to network");
-            log_printf(LOG_LEVEL_INFO, "IP address: %s", _ip_address);
-            log_printf(LOG_LEVEL_INFO, "Netmask: %s", _netmask);
-            log_printf(LOG_LEVEL_INFO, "Gateway: %s", _gateway);
-            log_printf(LOG_LEVEL_INFO, "MAC address: %s", _mac_address);
-            
-            return true;
+            status = _interface.get_connection_status();
+            if (status == NSAPI_STATUS_GLOBAL_UP) {
+                _connected = true;
+                _update_network_info();
+                
+                log_printf(LOG_LEVEL_INFO, "Connected to network successfully");
+                log_printf(LOG_LEVEL_INFO, "IP address: %s", _ip_address);
+                log_printf(LOG_LEVEL_INFO, "Netmask: %s", _netmask);
+                log_printf(LOG_LEVEL_INFO, "Gateway: %s", _gateway);
+                log_printf(LOG_LEVEL_INFO, "MAC address: %s", _mac_address);
+                
+                return true;
+            } else {
+                log_printf(LOG_LEVEL_WARN, "Connection established but status is %d", status);
+            }
+        } else if (result == NSAPI_ERROR_BUSY) {
+            log_printf(LOG_LEVEL_WARN, "Network device is busy, waiting...");
+            ThisThread::sleep_for(5s);  // ビジー状態の場合は5秒待機
+        } else {
+            log_printf(LOG_LEVEL_WARN, "Connection attempt %d failed with error: %d", retry_count + 1, result);
+            ThisThread::sleep_for(3s);  // 3秒待機
         }
         
-        log_printf(LOG_LEVEL_WARN, "Connection attempt %d failed", retry_count + 1);
         retry_count++;
-        ThisThread::sleep_for(2s);  // 2秒待機
     }
     
     log_printf(LOG_LEVEL_ERROR, "Failed to connect after %d attempts", MAX_RETRIES);
-            return false;
-        }
+    return false;
+}
 
 void NetworkManager::disconnect() {
     if (!_connected) {

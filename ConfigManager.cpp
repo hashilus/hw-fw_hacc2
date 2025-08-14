@@ -106,11 +106,16 @@ bool ConfigManager::loadConfig(bool create_if_not_exist) {
     // UDPポートのバリデーション
     log_printf(LOG_LEVEL_DEBUG, "Checking UDP port: %d", _data.udp_port);
     if (_data.udp_port < 1024 || _data.udp_port > 65535) {
-        log_printf(LOG_LEVEL_WARN, "Invalid UDP port: %d, using default: %d", _data.udp_port, DEFAULT_UDP_PORT);
-        _data.udp_port = DEFAULT_UDP_PORT;
+        log_printf(LOG_LEVEL_WARN, "Invalid UDP port: %d", _data.udp_port);
+        createDefaultConfig();
+        _used_default = true;
+        if (create_if_not_exist) {
+            return saveConfig();
+        }
+        return false;
     }
 
-    // デバッグレベルの範囲チェック
+    // デバッグレベルのバリデーション
     log_printf(LOG_LEVEL_DEBUG, "Checking debug level: %d", _data.debug_level);
     if (_data.debug_level > 3) {
         log_printf(LOG_LEVEL_WARN, "Invalid debug level: %d", _data.debug_level);
@@ -122,22 +127,10 @@ bool ConfigManager::loadConfig(bool create_if_not_exist) {
         return false;
     }
 
-    // NETBIOS名の正当性チェック
+    // NETBIOS名のバリデーション
     log_printf(LOG_LEVEL_DEBUG, "Validating NETBIOS name: %s", _data.netbios_name);
     if (!validateNetBIOSName(_data.netbios_name)) {
         log_printf(LOG_LEVEL_WARN, "Invalid NETBIOS name: %s", _data.netbios_name);
-        createDefaultConfig();
-        _used_default = true;
-        if (create_if_not_exist) {
-            return saveConfig();
-        }
-        return false;
-    }
-
-    // トランジション時間の範囲チェック
-    log_printf(LOG_LEVEL_DEBUG, "Checking transition time: %d ms", _data.ssr_link_transition_ms);
-    if (_data.ssr_link_transition_ms < 100 || _data.ssr_link_transition_ms > 10000) {
-        log_printf(LOG_LEVEL_WARN, "Invalid transition time: %d ms", _data.ssr_link_transition_ms);
         createDefaultConfig();
         _used_default = true;
         if (create_if_not_exist) {
@@ -182,6 +175,7 @@ void ConfigManager::createDefaultConfig() {
     // SSR-LED連動設定
     _data.ssr_link_enabled = true;  // デフォルトで有効化
     _data.ssr_link_transition_ms = 1000;  // デフォルトは1秒
+    _data.ssr_pwm_frequency = 1; // SSR制御周波数デフォルト1Hz
     
     // 各LEDの色設定
     for (int i = 0; i < 4; i++) {
@@ -387,6 +381,7 @@ void ConfigManager::printConfig() const {
     
     printNetworkConfig();
     printSSRLinkConfig();
+    log_printf(LOG_LEVEL_INFO, "SSR PWM Frequency: %d Hz", _data.ssr_pwm_frequency);
 }
 
 void ConfigManager::printNetworkConfig() const {
@@ -400,22 +395,12 @@ void ConfigManager::printNetworkConfig() const {
 }
 
 void ConfigManager::printSSRLinkConfig() const {
-    log_printf(LOG_LEVEL_INFO, "=== SSR-LED Link Settings ===");
-    log_printf(LOG_LEVEL_INFO, "Link: %s", _data.ssr_link_enabled ? "Enabled" : "Disabled");
+    log_printf(LOG_LEVEL_INFO, "SSR-LED Link: %s", _data.ssr_link_enabled ? "Enabled" : "Disabled");
     log_printf(LOG_LEVEL_INFO, "Transition Time: %d ms", _data.ssr_link_transition_ms);
-    
+    log_printf(LOG_LEVEL_INFO, "SSR PWM Frequency: %d Hz", _data.ssr_pwm_frequency);
     for (int i = 0; i < 4; i++) {
-        log_printf(LOG_LEVEL_INFO, "LED%d 0%%: R=%d G=%d B=%d", 
-            i + 1,
-            _data.ssr_link_colors_0[i].r,
-            _data.ssr_link_colors_0[i].g,
-            _data.ssr_link_colors_0[i].b);
-            
-        log_printf(LOG_LEVEL_INFO, "LED%d 100%%: R=%d G=%d B=%d", 
-            i + 1,
-            _data.ssr_link_colors_100[i].r,
-            _data.ssr_link_colors_100[i].g,
-            _data.ssr_link_colors_100[i].b);
+        log_printf(LOG_LEVEL_INFO, "LED%d 0%%: R=%d G=%d B=%d", i + 1, _data.ssr_link_colors_0[i].r, _data.ssr_link_colors_0[i].g, _data.ssr_link_colors_0[i].b);
+        log_printf(LOG_LEVEL_INFO, "LED%d 100%%: R=%d G=%d B=%d", i + 1, _data.ssr_link_colors_100[i].r, _data.ssr_link_colors_100[i].g, _data.ssr_link_colors_100[i].b);
     }
 }
 

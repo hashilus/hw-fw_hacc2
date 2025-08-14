@@ -13,7 +13,7 @@
             "lwip.ipv4-enabled": true,
             "lwip.ipv6-enabled": false,
             "lwip.igmp-enabled": true,
-            "lwip.mdns-enabled": false,
+            "lwip.mdns-enabled": true,
             "lwip.netbiosns-enabled": true,
             "lwip.apps-enabled": true,
             "lwip.apps.mdns-enabled": false,

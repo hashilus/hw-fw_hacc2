@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "main.h"
 #include "version.h"
+#include "WS2812Driver.h"
 #include "netsocket/NetworkInterface.h"
 #include "netsocket/NetworkStack.h"
 #include "netsocket/SocketAddress.h"
@@ -12,8 +13,8 @@
 #include "mbed-os/connectivity/lwipstack/lwip/src/include/lwip/inet.h"
 #include "mbed-os/connectivity/lwipstack/lwip/src/include/lwip/ip4_addr.h"
 
-UDPController::UDPController(SSRDriver& ssr_driver, RGBLEDDriver& rgb_led_driver, ConfigManager* config_manager)
-    : _ssr_driver(ssr_driver), _rgb_led_driver(rgb_led_driver), 
+UDPController::UDPController(SSRDriver& ssr_driver, RGBLEDDriver& rgb_led_driver, WS2812Driver& ws2812_driver, ConfigManager* config_manager)
+    : _ssr_driver(ssr_driver), _rgb_led_driver(rgb_led_driver), _ws2812_driver(ws2812_driver),
       _packet_callback(nullptr), _command_callback(nullptr),
       _config_manager(config_manager), _mist_active(false),
       _mist_start_time(0), _mist_duration(0), _interface(nullptr),
@@ -285,7 +286,9 @@ void UDPController::processCommand(const char* command, int length) {
             "config ssrlink <on/off> - Set SSR-LED link\n"
             "config ssrlink status - Show SSR-LED link status\n"
             "config rgb0 <led_id> <r> <g> <b> - Set LED 0%% color\n"
+            "config rgb0 status <led_id> - Get LED 0%% color\n"
             "config rgb100 <led_id> <r> <g> <b> - Set LED 100%% color\n"
+            "config rgb100 status <led_id> - Get LED 100%% color\n"
             "config trans <ms> - Set transition time\n"
             "config load - Load configuration\n"
             "config save - Save configuration\n"
@@ -295,6 +298,10 @@ void UDPController::processCommand(const char* command, int length) {
             "get <channel> - Get SSR duty cycle\n"
             "rgb <led_id> <r> <g> <b> - Set RGB LED color\n"
             "rgbget <led_id> - Get RGB LED color\n"
+            "ws2812 <system> <led_id> <r> <g> <b> - Set WS2812 LED color\n"
+            "ws2812get <system> <led_id> - Get WS2812 LED color\n"
+            "ws2812sys <system> <r> <g> <b> - Set WS2812 system color\n"
+            "ws2812off <system> - Turn off WS2812 system\n"
             "freq <channel> <freq> - Set SSR frequency");
         sendResponse(_send_buffer);
     }
@@ -345,39 +352,81 @@ void UDPController::processCommand(const char* command, int length) {
         }
     }
     else if (strncmp(cmd, "config rgb0 ", 12) == 0) {
-        int led_id, r, g, b;
-        if (sscanf(cmd + 12, "%d,%d,%d,%d", &led_id, &r, &g, &b) == 4) {
-            if (led_id >= 1 && led_id <= 3 &&
-                r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
-                _config_manager->setSSRLinkColor0(led_id, r, g, b);
-                snprintf(_send_buffer, MAX_BUFFER_SIZE, "LED%d 0%% color set to R:%d G:%d B:%d", 
-                    led_id, r, g, b);
-                sendResponse(_send_buffer);
+        const char* args = cmd + 12;
+        if (strncmp(args, "status ", 7) == 0) {
+            // 設定色を読み取るコマンド
+            int led_id;
+            if (sscanf(args + 7, "%d", &led_id) == 1) {
+                if (led_id >= 1 && led_id <= 4) {
+                    RGBColorData color = _config_manager->getSSRLinkColor0(led_id);
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "LED%d 0%% color: R:%d G:%d B:%d", 
+                        led_id, color.r, color.g, color.b);
+                    sendResponse(_send_buffer);
+                } else {
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid LED ID (1-4)");
+                    sendResponse(_send_buffer);
+                }
             } else {
-                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid parameters");
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid command format");
                 sendResponse(_send_buffer);
             }
         } else {
-            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid command format");
-            sendResponse(_send_buffer);
+            // 設定色を設定するコマンド（既存）
+            int led_id, r, g, b;
+            if (sscanf(args, "%d,%d,%d,%d", &led_id, &r, &g, &b) == 4) {
+                if (led_id >= 1 && led_id <= 4 &&
+                    r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
+                    _config_manager->setSSRLinkColor0(led_id, r, g, b);
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "LED%d 0%% color set to R:%d G:%d B:%d", 
+                        led_id, r, g, b);
+                    sendResponse(_send_buffer);
+                } else {
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid parameters");
+                    sendResponse(_send_buffer);
+                }
+            } else {
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid command format");
+                sendResponse(_send_buffer);
+            }
         }
     }
     else if (strncmp(cmd, "config rgb100 ", 14) == 0) {
-        int led_id, r, g, b;
-        if (sscanf(cmd + 14, "%d,%d,%d,%d", &led_id, &r, &g, &b) == 4) {
-            if (led_id >= 1 && led_id <= 3 &&
-                r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
-                _config_manager->setSSRLinkColor100(led_id, r, g, b);
-                snprintf(_send_buffer, MAX_BUFFER_SIZE, "LED%d 100%% color set to R:%d G:%d B:%d", 
-                    led_id, r, g, b);
-                sendResponse(_send_buffer);
+        const char* args = cmd + 14;
+        if (strncmp(args, "status ", 7) == 0) {
+            // 設定色を読み取るコマンド
+            int led_id;
+            if (sscanf(args + 7, "%d", &led_id) == 1) {
+                if (led_id >= 1 && led_id <= 3) {
+                    RGBColorData color = _config_manager->getSSRLinkColor100(led_id);
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "LED%d 100%% color: R:%d G:%d B:%d", 
+                        led_id, color.r, color.g, color.b);
+                    sendResponse(_send_buffer);
+                } else {
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid LED ID (1-3)");
+                    sendResponse(_send_buffer);
+                }
             } else {
-                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid parameters");
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid command format");
                 sendResponse(_send_buffer);
             }
         } else {
-            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid command format");
-            sendResponse(_send_buffer);
+            // 設定色を設定するコマンド（既存）
+            int led_id, r, g, b;
+            if (sscanf(args, "%d,%d,%d,%d", &led_id, &r, &g, &b) == 4) {
+                if (led_id >= 1 && led_id <= 3 &&
+                    r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
+                    _config_manager->setSSRLinkColor100(led_id, r, g, b);
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "LED%d 100%% color set to R:%d G:%d B:%d", 
+                        led_id, r, g, b);
+                    sendResponse(_send_buffer);
+                } else {
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid parameters");
+                    sendResponse(_send_buffer);
+                }
+            } else {
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid command format");
+                sendResponse(_send_buffer);
+            }
         }
     }
     else if (strncmp(cmd, "config trans ", 13) == 0 || strncmp(cmd, "config t ", 10) == 0) {
@@ -390,6 +439,24 @@ void UDPController::processCommand(const char* command, int length) {
         } else {
             snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid transition time. Must be 100-10000 ms");
             sendResponse(_send_buffer);
+        }
+    }
+    else if (strncmp(cmd, "config ssr_freq ", 16) == 0) {
+        const char* value = cmd + 16;
+        if (strcmp(value, "status") == 0) {
+            int freq = _config_manager->getSSRPWMFrequency();
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR PWM frequency is %d Hz", freq);
+            sendResponse(_send_buffer);
+        } else {
+            int freq = atoi(value);
+            if (freq >= 1 && freq <= 100) {
+                _config_manager->setSSRPWMFrequency(freq);
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR PWM frequency set to %d Hz", freq);
+                sendResponse(_send_buffer);
+            } else {
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid frequency (1-100 Hz)");
+                sendResponse(_send_buffer);
+            }
         }
     }
     else if (strcmp(cmd, "config load") == 0) {
@@ -415,6 +482,14 @@ void UDPController::processCommand(const char* command, int length) {
         processRGBCommand(cmd + 4);
     } else if (strncmp(cmd, "rgbget ", 7) == 0) {
         processRGBGetCommand(cmd + 7);
+    } else if (strncmp(cmd, "ws2812 ", 7) == 0) {
+        processWS2812Command(cmd + 7);
+    } else if (strncmp(cmd, "ws2812get ", 10) == 0) {
+        processWS2812GetCommand(cmd + 10);
+    } else if (strncmp(cmd, "ws2812sys ", 10) == 0) {
+        processWS2812SysCommand(cmd + 10);
+    } else if (strncmp(cmd, "ws2812off ", 10) == 0) {
+        processWS2812OffCommand(cmd + 10);
     } else if (strncmp(cmd, "sofia", 5) == 0) {
         processSofiaCommand();
     } else if (strncmp(cmd, "info", 4) == 0) {
@@ -423,6 +498,8 @@ void UDPController::processCommand(const char* command, int length) {
         processMistCommand(cmd + 5);
     } else if (strncmp(cmd, "air ", 4) == 0) {
         processAirCommand(cmd + 4);
+    } else if (strcmp(cmd, "zerox") == 0) {
+        processZeroCrossCommand();
     } else {
         // Unknown command
         snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Unknown command");
@@ -472,17 +549,10 @@ void UDPController::processSetCommand(const char* args) {
     if (id == 0) {
         // Set all SSRs
         for (int i = 1; i <= 4; i++) {
-            // Enable PWM mode
-            if (value > 0) {
-                _ssr_driver.enablePWM(i, true);
-            }
             success &= _ssr_driver.setDutyLevel(i, value);
         }
     } else {
         // Set specific SSR
-        if (value > 0) {
-            _ssr_driver.enablePWM(id, true);
-        }
         success = _ssr_driver.setDutyLevel(id, value);
     }
     
@@ -508,7 +578,7 @@ void UDPController::processFreqCommand(const char* args) {
     }
     
     // Check parameters
-    if (id < 0 || id > 4 || freq < 1 || freq > 10) {
+    if (id < 0 || id > 4 || freq < 0 || freq > 10) {
         generateErrorResponse(args);
         return;
     }
@@ -520,9 +590,8 @@ void UDPController::processFreqCommand(const char* args) {
         // Set frequency for all SSRs
         success = _ssr_driver.setPWMFrequency(freq);
     } else {
-        // Individual SSR frequency setting is not supported yet,
-        // but keep the condition branch for future expansion
-        success = _ssr_driver.setPWMFrequency(freq);
+        // Set frequency for individual SSR channel
+        success = _ssr_driver.setPWMFrequency(id, freq);
     }
     
     // Generate response
@@ -572,7 +641,7 @@ void UDPController::processRGBCommand(const char* args) {
     }
     
     // Check parameters
-    if (id < 0 || id > 3 || r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+    if (id < 0 || id > 4 || r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
         log_printf(LOG_LEVEL_WARN, "RGB command parameter error: id=%d, r=%d, g=%d, b=%d", id, r, g, b);
         generateErrorResponse(args);
         return;
@@ -585,7 +654,7 @@ void UDPController::processRGBCommand(const char* args) {
     // id=0 targets all RGB LEDs
     if (id == 0) {
         // Set all RGB LEDs
-        for (int i = 1; i <= 3; i++) {
+        for (int i = 1; i <= 4; i++) {
             success &= _rgb_led_driver.setColor(i, r, g, b);
         }
     } else {
@@ -732,6 +801,176 @@ void UDPController::processAirCommand(const char* args) {
     // Generate response
     snprintf(_send_buffer, MAX_BUFFER_SIZE, "air %d,%s", 
              level, success ? "OK" : "ERROR");
+    
+    // Send response
+    sendResponse(_send_buffer);
+}
+
+void UDPController::processZeroCrossCommand() {
+    // Get zero-cross statistics
+    uint32_t count, interval;
+    float frequency;
+    _ssr_driver.getZeroCrossStats(count, interval, frequency);
+    
+    bool detected = _ssr_driver.isZeroCrossDetected();
+    
+    // Generate response
+    snprintf(_send_buffer, MAX_BUFFER_SIZE, "zerox,%s,%lu,%lu,%.1f,OK", 
+             detected ? "DETECTED" : "NOT_DETECTED", interval, count, frequency);
+    
+    // Send response
+    sendResponse(_send_buffer);
+}
+
+void UDPController::processWS2812Command(const char* args) {
+    // Parse arguments: system,led_id,r,g,b
+    int system, led_id, r, g, b;
+    
+    if (sscanf(args, "%d,%d,%d,%d,%d", &system, &led_id, &r, &g, &b) != 5) {
+        log_printf(LOG_LEVEL_WARN, "WS2812 command parse error: %s", args);
+        generateErrorResponse(args);
+        return;
+    }
+    
+    // Check parameters
+    if (system < 1 || system > 3 || 
+        led_id < 1 || led_id > 256 ||
+        r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+        log_printf(LOG_LEVEL_WARN, "WS2812 command parameter error: system=%d, led=%d, r=%d, g=%d, b=%d", 
+                   system, led_id, r, g, b);
+        generateErrorResponse(args);
+        return;
+    }
+    
+    log_printf(LOG_LEVEL_DEBUG, "WS2812 command: system=%d, led=%d, r=%d, g=%d, b=%d", 
+               system, led_id, r, g, b);
+    
+    // Set WS2812 LED color
+    bool success = _ws2812_driver.setColor(system, led_id, r, g, b);
+    
+    // Update the LED
+    if (success) {
+        success = _ws2812_driver.update(system);
+    }
+    
+    // Generate response
+    snprintf(_send_buffer, MAX_BUFFER_SIZE, "ws2812 %d,%d,%d,%d,%d,%s", 
+             system, led_id, r, g, b, success ? "OK" : "ERROR");
+    
+    log_printf(success ? LOG_LEVEL_DEBUG : LOG_LEVEL_ERROR, 
+               "WS2812 command result: %s", success ? "SUCCESS" : "FAILED");
+    
+    // Send response
+    sendResponse(_send_buffer);
+}
+
+void UDPController::processWS2812GetCommand(const char* args) {
+    // Parse arguments: system,led_id
+    int system, led_id;
+    
+    if (sscanf(args, "%d,%d", &system, &led_id) != 2) {
+        log_printf(LOG_LEVEL_WARN, "WS2812GET command parse error: %s", args);
+        generateErrorResponse(args);
+        return;
+    }
+    
+    // Check parameters
+    if (system < 1 || system > 3 || led_id < 1 || led_id > 256) {
+        log_printf(LOG_LEVEL_WARN, "WS2812GET command parameter error: system=%d, led=%d", system, led_id);
+        generateErrorResponse(args);
+        return;
+    }
+    
+    uint8_t r, g, b;
+    bool success = _ws2812_driver.getColor(system, led_id, &r, &g, &b);
+    
+    if (success) {
+        // Generate response
+        snprintf(_send_buffer, MAX_BUFFER_SIZE, "ws2812get %d,%d,%d,%d,%d,OK", 
+                system, led_id, r, g, b);
+    } else {
+        // Generate error response
+        snprintf(_send_buffer, MAX_BUFFER_SIZE, "ws2812get %d,%d,ERROR", system, led_id);
+    }
+    
+    // Send response
+    sendResponse(_send_buffer);
+}
+
+void UDPController::processWS2812SysCommand(const char* args) {
+    // Parse arguments: system,r,g,b
+    int system, r, g, b;
+    
+    if (sscanf(args, "%d,%d,%d,%d", &system, &r, &g, &b) != 4) {
+        log_printf(LOG_LEVEL_WARN, "WS2812SYS command parse error: %s", args);
+        generateErrorResponse(args);
+        return;
+    }
+    
+    // Check parameters
+    if (system < 1 || system > 3 ||
+        r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+        log_printf(LOG_LEVEL_WARN, "WS2812SYS command parameter error: system=%d, r=%d, g=%d, b=%d", 
+                   system, r, g, b);
+        generateErrorResponse(args);
+        return;
+    }
+    
+    log_printf(LOG_LEVEL_DEBUG, "WS2812SYS command: system=%d, r=%d, g=%d, b=%d", 
+               system, r, g, b);
+    
+    // Set all LEDs in the system to the same color
+    bool success = _ws2812_driver.setSystemColor(system, r, g, b);
+    
+    // Update the system
+    if (success) {
+        success = _ws2812_driver.update(system);
+    }
+    
+    // Generate response
+    snprintf(_send_buffer, MAX_BUFFER_SIZE, "ws2812sys %d,%d,%d,%d,%s", 
+             system, r, g, b, success ? "OK" : "ERROR");
+    
+    log_printf(success ? LOG_LEVEL_DEBUG : LOG_LEVEL_ERROR, 
+               "WS2812SYS command result: %s", success ? "SUCCESS" : "FAILED");
+    
+    // Send response
+    sendResponse(_send_buffer);
+}
+
+void UDPController::processWS2812OffCommand(const char* args) {
+    // Parse arguments: system
+    int system;
+    
+    if (sscanf(args, "%d", &system) != 1) {
+        log_printf(LOG_LEVEL_WARN, "WS2812OFF command parse error: %s", args);
+        generateErrorResponse(args);
+        return;
+    }
+    
+    // Check parameters
+    if (system < 1 || system > 3) {
+        log_printf(LOG_LEVEL_WARN, "WS2812OFF command parameter error: system=%d", system);
+        generateErrorResponse(args);
+        return;
+    }
+    
+    log_printf(LOG_LEVEL_DEBUG, "WS2812OFF command: system=%d", system);
+    
+    // Turn off all LEDs in the system
+    bool success = _ws2812_driver.turnOff(system);
+    
+    // Update the system
+    if (success) {
+        success = _ws2812_driver.update(system);
+    }
+    
+    // Generate response
+    snprintf(_send_buffer, MAX_BUFFER_SIZE, "ws2812off %d,%s", 
+             system, success ? "OK" : "ERROR");
+    
+    log_printf(success ? LOG_LEVEL_DEBUG : LOG_LEVEL_ERROR, 
+               "WS2812OFF command result: %s", success ? "SUCCESS" : "FAILED");
     
     // Send response
     sendResponse(_send_buffer);

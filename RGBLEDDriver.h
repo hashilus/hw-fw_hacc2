@@ -32,7 +32,7 @@ public:
                 PinName rgb1_r_pin = P8_14, PinName rgb1_g_pin = P3_2, PinName rgb1_b_pin = P8_15,
                 PinName rgb2_r_pin = P8_13, PinName rgb2_g_pin = P8_11, PinName rgb2_b_pin = P4_4,
                 PinName rgb3_r_pin = P4_6,  PinName rgb3_g_pin = P4_5,  PinName rgb3_b_pin = P4_7,
-                PinName rgb4_r_pin = P3_10, PinName rgb4_g_pin = P3_8,  PinName rgb4_b_pin = P3_11);
+                PinName rgb4_r_pin = P3_10, PinName rgb4_g_pin = P3_8,  PinName rgb4_b_pin = P2_1);
     
     /**
      * Destructor

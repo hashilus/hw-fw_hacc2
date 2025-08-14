@@ -3,35 +3,10 @@
 
 #include "mbed.h"
 
-// MTU0レジスタ定義
-#define MTU0_BASE           (0xE8000000UL)
-#define MTU0_TCR           (*(volatile uint16_t *)(MTU0_BASE + 0x00))
-#define MTU0_TMDR          (*(volatile uint16_t *)(MTU0_BASE + 0x02))
-#define MTU0_TIORH         (*(volatile uint16_t *)(MTU0_BASE + 0x04))
-#define MTU0_TIORL         (*(volatile uint16_t *)(MTU0_BASE + 0x06))
-#define MTU0_TIER          (*(volatile uint16_t *)(MTU0_BASE + 0x08))
-#define MTU0_TSR           (*(volatile uint16_t *)(MTU0_BASE + 0x0A))
-#define MTU0_TCNT          (*(volatile uint16_t *)(MTU0_BASE + 0x0C))
-#define MTU0_TGRA          (*(volatile uint16_t *)(MTU0_BASE + 0x0E))
-#define MTU0_TGRB          (*(volatile uint16_t *)(MTU0_BASE + 0x10))
-#define MTU0_TGRC          (*(volatile uint16_t *)(MTU0_BASE + 0x12))
-#define MTU0_TGRD          (*(volatile uint16_t *)(MTU0_BASE + 0x14))
+// ゼロクロス検出ピン
+#define ZEROX_PIN P3_9
 
-// MTU0ビット定義
-#define MTU_TCR_TPSC_1     (0x00)  // PCLK/1
-#define MTU_TCR_TPSC_4     (0x01)  // PCLK/4
-#define MTU_TCR_TPSC_16    (0x02)  // PCLK/16
-#define MTU_TCR_TPSC_64    (0x03)  // PCLK/64
-#define MTU_TCR_TPSC_256   (0x04)  // PCLK/256
-#define MTU_TCR_TPSC_1024  (0x05)  // PCLK/1024
 
-#define MTU_TMDR_MD_NORMAL (0x00)  // 通常動作モード
-
-#define MTU_TIOR_IOA_INPUT (0x01)  // 入力キャプチャ（立ち上がりエッジ）
-
-#define MTU_TIER_TGIEA     (0x01)  // TGRA割り込み許可
-
-#define MTU_TSR_TGFA       (0x01)  // TGRAフラグ
 
 /**
  * Solid State Relay (SSR) driver class
@@ -94,13 +69,7 @@ public:
      */
     uint8_t getDutyLevel(uint8_t id);
     
-    /**
-     * Enable PWM mode
-     * @param id SSR number (1-4)
-     * @param enable true for PWM mode, false for digital output mode
-     * @return true if successful, false otherwise
-     */
-    bool enablePWM(uint8_t id, bool enable);
+
     
     /**
      * Set PWM frequency (common for all SSRs)
@@ -110,15 +79,79 @@ public:
     bool setPWMFrequency(uint8_t frequency_hz);
     
     /**
+     * Set PWM frequency for specific SSR channel
+     * @param id SSR number (1-4)
+     * @param frequency_hz Frequency (1-10Hz)
+     * @return true if successful, false otherwise
+     */
+    bool setPWMFrequency(uint8_t id, uint8_t frequency_hz);
+    
+    /**
      * Get the current PWM frequency
      * @return Current PWM frequency (Hz)
      */
     uint8_t getPWMFrequency();
     
     /**
+     * Get detailed status of SSR for debugging
+     * @param id SSR number (1-4)
+     * @param duty_level Output parameter for duty level
+     * @param state Output parameter for current state
+     * @param period Output parameter for control period
+     * @return true if successful, false otherwise
+     */
+    bool getSSRStatus(uint8_t id, uint8_t& duty_level, bool& state, uint32_t& period);
+    
+    /**
+     * Get the current PWM frequency for specific SSR channel
+     * @param id SSR number (1-4)
+     * @return Current PWM frequency (Hz)
+     */
+    uint8_t getPWMFrequency(uint8_t id);
+    
+    /**
+     * Get zero-cross detection status
+     * @return true if zero-cross is detected, false otherwise
+     */
+    bool isZeroCrossDetected() const { return _zerox_flag; }
+    
+    /**
+     * Get zero-cross interval
+     * @return Interval between zero-crosses in microseconds
+     */
+    uint32_t getZeroCrossInterval() const { return _last_zerox_interval_us; }  // 立ち上がりエッジ間隔（マイクロ秒）
+    
+    /**
+     * Get zero-cross count (for debugging)
+     * @return Number of zero-cross detections
+     */
+    uint32_t getZeroCrossCount() const { return _zerox_count; }
+    
+    /**
+     * Reset zero-cross count and get current statistics
+     * @return Current count before reset
+     */
+    uint32_t resetZeroCrossCount() { 
+        uint32_t count = _zerox_count; 
+        _zerox_count = 0; 
+        return count; 
+    }
+    
+    /**
+     * Get zero-cross statistics for monitoring
+     * @param count Output: number of detections
+     * @param interval Output: last interval in microseconds
+     * @param frequency Output: calculated frequency in Hz
+     */
+    void getZeroCrossStats(uint32_t& count, uint32_t& interval, float& frequency) const;
+    
+    // デバッグ情報取得
+    void getDebugInfo(uint32_t& power_freq, uint32_t& on_time_us, uint32_t& cycle_time_us) const;
+    
+    /**
      * Timer callback for PWM control
      */
-    void timerCallback();
+    // timerCallback()は削除（Ticker不要のため）
 
     /**
      * Get the current power line frequency
@@ -126,51 +159,88 @@ public:
      */
     uint32_t getPowerLineFrequency();
 
-    void captureInterruptHandler();
+
+
+    /**
+     * ゼロクロス割り込みハンドラ（P3_9両エッジ）
+     */
+    void zeroxEdgeHandler();
+    
+    /**
+     * ゼロクロス制御ハンドラ（Tickerで呼び出し）
+     */
+    void zeroxControlHandler();
+
+    /**
+     * SSR制御の内部状態を更新（周期カウント等）
+     * 注意：現在はゼロクロス割り込みで制御するため、この関数は何もしません
+     */
+    void updateControl();
 
 private:
     DigitalOut* _ssr[4];   // Pins for SSR control
     bool _state[4];        // Current state
     uint8_t _duty_level[4]; // Current duty cycle level (0-100)
-    bool _is_pwm[4];       // Whether PWM mode is enabled
     
-    // Timer for PWM control
-    Ticker _pwm_ticker;
-    
-    // Counter for PWM control
-    uint8_t _pwm_counter;
-    
-    // PWM period (ms)
-    uint32_t _pwm_period_ms;
-    
-    // PWM frequency (Hz)
+    // PWM frequency (Hz) - common for all SSRs
     uint8_t _pwm_frequency_hz;
     
-    // PWM resolution
-    const uint8_t PWM_RESOLUTION = 100; // 100 steps
+    // PWM frequency (Hz) - individual for each SSR
+    uint8_t _pwm_frequency_hz_individual[4];
     
-    // Update timer
-    void updateTimer();
+    // 時間周期制御用カウンタ（ゼロクロス割り込み内で加算）
+    uint32_t _time_on_count[4] = {0}; // 各チャンネルのON時間（ゼロクロス回数）
 
-    // Power line frequency measurement
-    struct {
-        uint32_t buffer[256];  // Measurement buffer
-        uint8_t index;         // Current buffer position
-        uint32_t last_capture; // Last capture value
-        uint32_t frequency;    // Calculated frequency
-        bool buffer_full;      // Whether buffer is full
-    } _freq_measure;
 
-    // Timer for frequency measurement
-    Timer _freq_timer;
+
+    // ゼロクロス検出用（両エッジ検出）
+    InterruptIn _zerox_in{ZEROX_PIN};
+    volatile bool _zerox_flag = false;
+    Timer _zerox_timer; // ゼロクロス周期計測用
+    uint32_t _zerox_count = 0;  // ゼロクロス検出回数（デバッグ用）
     
-    // Calculate frequency from measurements
-    void calculateFrequency();
+    // P8_11入力端子（将来の拡張用）
+    DigitalIn* _p8_11_input;
+    
+    // 立ち上がりエッジ間隔計算用
+    uint32_t _last_zerox_interval_us = 0;  // 最後の立ち上がりエッジ間隔（マイクロ秒）
+    uint32_t _last_rise_time_us = 0;       // 最後の立ち上がりエッジ時刻
+    
+    // ゼロクロス遅延計算用（両エッジ検出）
+    uint32_t _rise_time_us = 0;  // 立ち上がり時刻
+    uint32_t _fall_time_us = 0;  // 立ち下がり時刻
+    bool _waiting_for_fall = false;  // 立ち下がり待ちフラグ
+    uint32_t _zerox_delay_us = 0;  // 立ち上がりエッジからゼロクロス点までの遅延時間
+    
+    // デバッグ用変数（割り込み内で更新、メインループで出力）
+    volatile uint32_t _debug_power_freq = 0;  // 検出された商用電源周波数
+    volatile uint32_t _debug_on_time_us = 0;  // 計算されたON時間
+    volatile uint32_t _debug_cycle_time_us = 0;  // 計算された周期時間
+    
+    // トライアック制御用Timeout
+    Timeout _triac_off_timeout[4];  // OFF用のTimeout
+    Timeout _zerox_control_timeout;  // ゼロクロス制御用Timeout
 
-    PwmOut _pwm1;
-    PwmOut _pwm2;
-    PwmOut _pwm3;
-    PwmOut _pwm4;
+    // SSR制御用カウンタ（統一後）
+    uint32_t _ssr_counter[4] = {0};  // 各チャンネルのカウンタ（ゼロクロス回数）
+    uint32_t _ssr_period[4] = {0};   // 各チャンネルの周期（ゼロクロス回数）
+    uint32_t _ssr_start_time[4] = {0}; // 各SSRの周期開始時刻（ms）- 後方互換性のため残す
+    // トライアック制御用
+    uint32_t _triac_delay_us = 100; // ゼロクロスからONまでの遅延時間（マイクロ秒）
+    
+    // トライアックON用コールバック
+    void turnOnSSR(int ssr_id);
+    // トライアックOFF用コールバック
+    void turnOffSSR(int ssr_id);
+    // トライアック制御用コールバック（各SSR専用）
+    void turnOnSSR0();
+    void turnOnSSR1();
+    void turnOnSSR2();
+    void turnOnSSR3();
+    void turnOffSSR0();
+    void turnOffSSR1();
+    void turnOffSSR2();
+    void turnOffSSR3();
 };
 
 #endif // SSR_DRIVER_H 

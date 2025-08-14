@@ -3,6 +3,7 @@
 #include "mbed.h"
 #include "SSRDriver.h"
 #include "RGBLEDDriver.h"
+#include "WS2812Driver.h"
 #include "ConfigManager.h"
 #include "EthernetInterface.h"
 #include "main.h"  // log_printfの定義を含む
@@ -17,7 +18,7 @@
 #define UDP_PORT 5555
 
 // バッファサイズの定義
-#define MAX_BUFFER_SIZE 256
+#define MAX_BUFFER_SIZE 1024
 
 // デバッグ設定
 #define DEBUG_LEVEL 1
@@ -29,7 +30,7 @@
 
 class UDPController {
 public:
-    UDPController(SSRDriver& ssr_driver, RGBLEDDriver& rgb_led_driver, ConfigManager* config_manager);
+    UDPController(SSRDriver& ssr_driver, RGBLEDDriver& rgb_led_driver, WS2812Driver& ws2812_driver, ConfigManager* config_manager);
     ~UDPController();
     
     // 初期化と実行
@@ -58,10 +59,15 @@ private:
     void processGetCommand(const char* args);
     void processRGBCommand(const char* args);
     void processRGBGetCommand(const char* args);
+    void processWS2812Command(const char* args);
+    void processWS2812GetCommand(const char* args);
+    void processWS2812SysCommand(const char* args);
+    void processWS2812OffCommand(const char* args);
     void processSofiaCommand();
     void processInfoCommand();
     void processMistCommand(const char* args);
     void processAirCommand(const char* args);
+    void processZeroCrossCommand();
     void generateErrorResponse(const char* command);
     void sendResponse(const char* response);
     
@@ -77,6 +83,7 @@ private:
     // ドライバー参照
     SSRDriver& _ssr_driver;
     RGBLEDDriver& _rgb_led_driver;
+    WS2812Driver& _ws2812_driver;
     
     // 設定マネージャー
     ConfigManager* _config_manager;

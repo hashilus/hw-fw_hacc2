@@ -17,6 +17,7 @@ add_executable(${APP_TARGET}
     main.cpp
     SSRDriver.cpp
     RGBLEDDriver.cpp
+    WS2812Driver.cpp
     UDPController.cpp
     ConfigManager.cpp
     Eeprom93C46Core.cpp

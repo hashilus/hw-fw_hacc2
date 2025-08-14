@@ -19,7 +19,7 @@ typedef void (*CommandCallback)(const char* command);
 #define LOG_LEVEL_WARN  1
 #define LOG_LEVEL_ERROR 0
 
-#define MAX_BUFFER_SIZE 256
+#define MAX_BUFFER_SIZE 1024
 #define MAX_HISTORY_SIZE 10
 
 /**
@@ -86,6 +86,8 @@ public:
     void set_rgb_led_driver(RGBLEDDriver* rgb_led_driver) {
         _rgb_led_driver = rgb_led_driver;
     }
+
+
 
 private:
     BufferedSerial& _pc;

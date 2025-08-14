@@ -17,6 +17,7 @@ struct ConfigData {
     // 2バイトのメンバーをまとめる
     uint16_t udp_port;              // UDPポート番号
     uint16_t ssr_link_transition_ms;// 色変化の時間（ミリ秒）
+    uint16_t ssr_pwm_frequency;      // SSR制御周波数（Hz）
 
     // 4バイトのメンバーをまとめる
     uint32_t ip_address;            // IPアドレス（ネットワークバイトオーダー）

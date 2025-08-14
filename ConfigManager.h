@@ -65,6 +65,9 @@ public:
     RGBColorData getSSRLinkColor100(int led_id) const;  // 100%時の色を取得
     RGBColorData calculateLEDColorForSSR(int led_id, int duty) const;  // デューティ比に応じた色を計算
 
+    uint16_t getSSRPWMFrequency() const { return _data.ssr_pwm_frequency; }
+    void setSSRPWMFrequency(uint16_t freq) { _data.ssr_pwm_frequency = freq; saveConfig(); }
+
     void createDefaultConfig();
 
     bool usedDefaultConfig() const { return _used_default; }

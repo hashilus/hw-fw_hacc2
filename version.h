@@ -3,8 +3,8 @@
 
 // バージョン情報
 #define VERSION_MAJOR 2
-#define VERSION_MINOR 0
-#define VERSION_PATCH 4
+#define VERSION_MINOR 1
+#define VERSION_PATCH 0
 
 // バージョン文字列を自動生成
 #define VERSION_STRINGIFY(x) #x

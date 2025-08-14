@@ -6,6 +6,7 @@
 #include "mbed.h"
 #include "SSRDriver.h"
 #include "RGBLEDDriver.h"
+#include "WS2812Driver.h"
 #include "UDPController.h"
 #include "ConfigManager.h"
 #include "PinNames.h"
@@ -21,10 +22,11 @@
 #include "BufferedSerial.h"
 #include "EthernetInterface.h"
 #include <memory>  // std::unique_ptr用
+#include "iodefine.h"
 
 // SSRの数とRGB LEDの数
 #define SSR_NUM_CHANNELS 4
-#define RGB_LED_NUM 3
+#define RGB_LED_NUM 4
 
 // スリープ時間の単位を定義（C++11以降の時間リテラル用）
 using namespace std::chrono;
@@ -58,6 +60,7 @@ static std::unique_ptr<NetworkManager> network_manager;
 static std::unique_ptr<UDPController> udp_controller;
 static SSRDriver ssr;
 static std::unique_ptr<RGBLEDDriver> rgb_led;
+static std::unique_ptr<WS2812Driver> ws2812_driver;
 static SerialController serial_controller(nullptr, &ssr, nullptr, pc);
 
 // SSRの出力に合わせてLEDを更新するタイマー
@@ -209,6 +212,9 @@ int debug_level = LOG_LEVEL_DEBUG;
 
 // ログ出力関数
 void log_printf(int level, const char* format, ...) {
+    // シリアル出力を同期化
+    serial_mutex.lock();
+    
     va_list args;
     char buffer[256];
     
@@ -220,6 +226,7 @@ void log_printf(int level, const char* format, ...) {
     // バッファサイズチェック
     if (size < 0 || size >= static_cast<int>(sizeof(buffer))) {
         safe_printf("[ERROR] Buffer overflow in log_printf");
+        serial_mutex.unlock();
         return;
     }
     
@@ -264,7 +271,14 @@ void log_printf(int level, const char* format, ...) {
     }
     
     // カラーコード付きで出力
-    safe_printf("%s[%s] %s\033[0m", color_code, level_str, buffer);
+    safe_printf("[%s] %s%s\033[0m", level_str, color_code, buffer);
+    
+    serial_mutex.unlock();
+}
+
+void print_reset_reason() {
+    // RZ/A1Hにはリセット要因レジスタが存在しないため、判定不可
+    log_printf(LOG_LEVEL_INFO, "[RESET] Reset reason detection is not supported on RZ/A1H");
 }
 
 void init_network() {
@@ -376,8 +390,60 @@ void init_network() {
     log_printf(LOG_LEVEL_INFO, "Network initialization completed successfully");
 }
 
+// RZ_A1H用ウォッチドッグタイマー制御
+// WDTレジスタ定義（iodefine.hに含まれているが、明示的に定義）
+#define WDT_BASE        0xFCFE0000uL
+#define WDT_WTCSR       (*(volatile uint16_t*)(WDT_BASE + 0x00))
+#define WDT_WTCNT       (*(volatile uint16_t*)(WDT_BASE + 0x02))
+#define WDT_WRCSR       (*(volatile uint16_t*)(WDT_BASE + 0x04))
+
+// WTCSRビット定義
+#define WTCSR_TME       0x20    // Timer enable
+#define WTCSR_WTIT      0x40    // Watchdog timer interrupt
+#define WTCSR_IOVF      0x80    // Interrupt overflow flag
+#define WTCSR_CKS_MASK  0x0F    // Clock select mask
+
+// WRCSRビット定義
+#define WRCSR_RSTE      0x40    // Reset enable
+#define WRCSR_WOVF      0x80    // Watchdog overflow flag
+
+// ウォッチドッグタイマー初期化
+void init_watchdog() {
+    // ウォッチドッグタイマーを無効化
+    WDT_WTCSR &= ~WTCSR_TME;
+    
+    // リセット機能を有効化（システム監視用）
+    WDT_WRCSR |= WRCSR_RSTE;
+    
+    // カウンターをクリア
+    WDT_WTCNT = 0;
+    
+    // オーバーフローフラグをクリア
+    WDT_WTCSR &= ~WTCSR_IOVF;
+    WDT_WRCSR &= ~WRCSR_WOVF;
+    
+    // クロック設定（PCLK/256、約6秒タイムアウト）
+    WDT_WTCSR = (WDT_WTCSR & ~WTCSR_CKS_MASK) | 0x08;  // PCLK/256
+    
+    // ウォッチドッグタイマーを有効化
+    WDT_WTCSR |= WTCSR_TME;
+    
+    log_printf(LOG_LEVEL_INFO, "Watchdog timer initialized with ~6s timeout");
+}
+
+// ウォッチドッグタイマーkick処理
+void kick_watchdog() {
+    // カウンターをクリア
+    WDT_WTCNT = 0;
+}
+
 int main()
 {
+    print_reset_reason();
+    
+    // ウォッチドッグタイマー初期化（リセット要因確認後）
+    init_watchdog();
+    
     // シリアル通信の初期化
     pc.set_baud(115200);
     pc.set_format(8, BufferedSerial::None, 1);
@@ -397,56 +463,77 @@ int main()
     // Initialize configuration manager
     log_printf(LOG_LEVEL_INFO, "Initializing configuration manager...");
     config_manager = std::make_unique<ConfigManager>();
+    kick_watchdog();  // ConfigManager初期化後にkick（設定読み込み完了後）
     
     // Initialize RGB LED driver with config manager
     log_printf(LOG_LEVEL_INFO, "Initializing RGB LED driver...");
+    kick_watchdog();  // RGBLEDDriver初期化前にkick
     rgb_led = std::make_unique<RGBLEDDriver>(ssr, config_manager.get());
+    kick_watchdog();  // RGBLEDDriver初期化後にkick
+    
+    // Initialize WS2812 driver
+    log_printf(LOG_LEVEL_INFO, "Initializing WS2812 driver...");
+    ws2812_driver = std::make_unique<WS2812Driver>();
+    kick_watchdog();  // 初期化中にkick
     
     // Initialize network manager
     log_printf(LOG_LEVEL_INFO, "Initializing network manager...");
     network_manager = std::make_unique<NetworkManager>(config_manager.get());
+    kick_watchdog();  // 初期化中にkick
     
     // Initialize UDP controller
     log_printf(LOG_LEVEL_INFO, "Initializing UDP controller...");
-    udp_controller = std::make_unique<UDPController>(ssr, *rgb_led, config_manager.get());
+    udp_controller = std::make_unique<UDPController>(ssr, *rgb_led, *ws2812_driver, config_manager.get());
+    kick_watchdog();  // 初期化中にkick
     
     // Update serial controller with config manager and drivers
     log_printf(LOG_LEVEL_INFO, "Configuring serial controller...");
     serial_controller.set_config_manager(config_manager.get());
     serial_controller.set_rgb_led_driver(rgb_led.get());
+    kick_watchdog();  // 初期化中にkick
     
-    // Load configuration from EEPROM
-    log_printf(LOG_LEVEL_DEBUG, "Loading configuration from EEPROM...");
-    bool config_loaded = config_manager->loadConfig(true);
-    if (!config_loaded) {
-        log_printf(LOG_LEVEL_WARN, "Failed to load config from EEPROM, using default settings");
-    } else if (config_manager->usedDefaultConfig()) {
-        log_printf(LOG_LEVEL_WARN, "EEPROM data invalid, using default settings");
-    } else {
-        log_printf(LOG_LEVEL_INFO, "Configuration loaded successfully");
-    }
+    // Load configuration from EEPROM (ConfigManagerのコンストラクタで既に読み込み済み)
+    log_printf(LOG_LEVEL_DEBUG, "Configuration already loaded in ConfigManager constructor");
+    kick_watchdog();  // 設定読み込み確認後にkick
     
     // MACアドレスはEEPROMから自動的に読み込まれ、mbed_mac_address関数で設定される
     log_printf(LOG_LEVEL_INFO, "Network Settings:");
+    kick_watchdog();  // ネットワーク設定表示開始前にkick
+    
     char mac[6];
     mbed_mac_address(mac);  // EEPROMから読み込まれたMACアドレスを取得
     log_printf(LOG_LEVEL_INFO, "- MAC: %02X:%02X:%02X:%02X:%02X:%02X", 
                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    kick_watchdog();  // MACアドレス取得後にkick
     
     // Initialize network services
     log_printf(LOG_LEVEL_INFO, "Initializing network services...");
+    kick_watchdog();  // ネットワーク初期化開始前にkick
+    
     init_network();
+    kick_watchdog();  // ネットワーク初期化後にkick
     
     // Display current network settings
     log_printf(LOG_LEVEL_INFO, "- DHCP: %s", config_manager->isDHCPEnabled() ? "Enabled" : "Disabled");
+    kick_watchdog();  // DHCP設定表示後にkick
+    
     log_printf(LOG_LEVEL_INFO, "- Current IP: %s", config_manager->getCurrentIPAddress());
+    kick_watchdog();  // IP設定表示後にkick
+    
     log_printf(LOG_LEVEL_INFO, "- Current Netmask: %s", config_manager->getCurrentNetmask());
+    kick_watchdog();  // ネットマスク設定表示後にkick
+    
     log_printf(LOG_LEVEL_INFO, "- Current Gateway: %s", config_manager->getCurrentGateway());
+    kick_watchdog();  // ゲートウェイ設定表示後にkick
+    
     log_printf(LOG_LEVEL_INFO, "- NETBIOS: %s", config_manager->getNetBIOSName());
     log_printf(LOG_LEVEL_INFO, "------------------------------------------");
+    kick_watchdog();  // ネットワーク設定表示後にkick
     
     // Display SSR-LED link status
     log_printf(LOG_LEVEL_INFO, "SSR-LED Link Status:");
+    kick_watchdog();  // SSR-LED設定表示開始前にkick
+    
     if (config_manager->isSSRLinkEnabled()) {
         log_printf(LOG_LEVEL_INFO, "- Status: Enabled");
         log_printf(LOG_LEVEL_INFO, "- Transition Time: %d ms", config_manager->getSSRLinkTransitionTime());
@@ -454,20 +541,28 @@ int main()
         log_printf(LOG_LEVEL_INFO, "- Status: Disabled");
     }
     log_printf(LOG_LEVEL_INFO, "------------------------------------------");
+    kick_watchdog();  // SSR-LED設定表示後にkick
     
     // Display communication interfaces
     log_printf(LOG_LEVEL_INFO, "Communication Interfaces:");
     log_printf(LOG_LEVEL_INFO, "- UDP: Port %d", config_manager->getUDPPort());
     log_printf(LOG_LEVEL_INFO, "- Serial: 115200 bps, 8N1");
     log_printf(LOG_LEVEL_INFO, "------------------------------------------");
+    kick_watchdog();  // 通信インターフェース表示後にkick
     
     // Display available commands
     log_printf(LOG_LEVEL_INFO, "UDP SOCKET Available Commands:");
+    kick_watchdog();  // コマンド表示開始前にkick
+    
     log_printf(LOG_LEVEL_INFO, "  set/ssr <num>,<value>  Set SSR output (0-100%%, ON/OFF)");
     log_printf(LOG_LEVEL_INFO, "  freq <num>,<hz>        Set PWM frequency (1-10Hz)");
     log_printf(LOG_LEVEL_INFO, "  get <num>              Get current settings");
     log_printf(LOG_LEVEL_INFO, "  rgb <num>,<r>,<g>,<b>  Set RGB LED color (0-255)");
     log_printf(LOG_LEVEL_INFO, "  rgbget <num>           Get RGB LED color");
+    log_printf(LOG_LEVEL_INFO, "  ws2812 <sys>,<led>,<r>,<g>,<b>  Set WS2812 LED color");
+    log_printf(LOG_LEVEL_INFO, "  ws2812get <sys>,<led>  Get WS2812 LED color");
+    log_printf(LOG_LEVEL_INFO, "  ws2812sys <sys>,<r>,<g>,<b>  Set WS2812 system color");
+    log_printf(LOG_LEVEL_INFO, "  ws2812off <sys>        Turn off WS2812 system");
     log_printf(LOG_LEVEL_INFO, "  mist <ms>              Mist control (0-10000ms)");
     log_printf(LOG_LEVEL_INFO, "  air <level>            Air control (0:OFF, 1:Low, 2:High)");
     log_printf(LOG_LEVEL_INFO, "  sofia                  Cute Sofia");
@@ -482,6 +577,7 @@ int main()
     log_printf(LOG_LEVEL_INFO, "  config save             Save configuration");
     log_printf(LOG_LEVEL_INFO, "  config load             Load configuration");
     log_printf(LOG_LEVEL_INFO, "------------------------------------------");
+    kick_watchdog();  // コマンド表示後にkick
     
     log_printf(LOG_LEVEL_INFO, "System initialization completed");
     
@@ -489,6 +585,7 @@ int main()
     udp_controller->setPacketCallback(packet_received);
     udp_controller->setCommandCallback(command_executed);
     udp_controller->setConfigManager(config_manager.get());
+    kick_watchdog();  // コールバック設定後にkick
     
     // Start command processing loop
     log_printf(LOG_LEVEL_INFO, "Starting command processing...");
@@ -497,7 +594,6 @@ int main()
     rtos::Thread udp_thread;
     rtos::Thread serial_thread;
     
-    // Wrap callback functions to reduce size
     udp_thread.start([]() {
         udp_controller->run();
     });
@@ -506,8 +602,33 @@ int main()
         serial_controller.run();
     });
     
+    // システムステータスを準備完了に設定
+    update_status_led(STATUS_READY);
+    
+    // ウォッチドッグkick用カウンター
+    uint32_t watchdog_counter = 0;
+    
+    // ゼロクロス監視用カウンター
+    uint32_t zerox_monitor_counter = 0;
+    uint32_t last_zerox_count = 0;
+    
+    // デバッグ情報表示用カウンター
+    uint32_t debug_monitor_counter = 0;
+    uint32_t last_debug_power_freq = 0;
+    uint32_t last_debug_on_time_us = 0;
+    
     // Main thread handles LED updates
     while (true) {
+        // SSR制御の内部状態を更新（ゼロクロス・PWM対応）
+        ssr.updateControl();
+        
+        // ウォッチドッグタイマーを定期的にkick（100msごと）
+        watchdog_counter++;
+        if (watchdog_counter >= 10) {  // 10ms x 10 = 100ms
+            kick_watchdog();
+            watchdog_counter = 0;
+        }
+        
         // Add short wait time to reduce CPU usage
         wait_us(10000);  // 10ms wait
     }
