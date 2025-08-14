@@ -547,11 +547,13 @@ int main()
     log_printf(LOG_LEVEL_INFO, "Applying SSR PWM frequency from configuration...");
     kick_watchdog();  // SSR周波数適用開始前にkick
     
-    uint16_t saved_freq = config_manager->getSSRPWMFrequency();
-    if (ssr.setPWMFrequency(saved_freq)) {
-        log_printf(LOG_LEVEL_INFO, "- SSR PWM Frequency: %d Hz (applied)", saved_freq);
-    } else {
-        log_printf(LOG_LEVEL_WARN, "- SSR PWM Frequency: %d Hz (failed to apply, using default)", saved_freq);
+    for (int i = 1; i <= 4; i++) {
+        uint8_t saved_freq = config_manager->getSSRPWMFrequency(i);
+        if (ssr.setPWMFrequency(i, saved_freq)) {
+            log_printf(LOG_LEVEL_INFO, "- SSR%d PWM Frequency: %d Hz (applied)", i, saved_freq);
+        } else {
+            log_printf(LOG_LEVEL_WARN, "- SSR%d PWM Frequency: %d Hz (failed to apply, using default)", i, saved_freq);
+        }
     }
     log_printf(LOG_LEVEL_INFO, "------------------------------------------");
     kick_watchdog();  // SSR周波数適用後にkick

@@ -227,6 +227,7 @@ void SerialController::displayHelp() {
     log_printf(LOG_LEVEL_INFO, "  config rgb0 <n>,<r>,<g>,<b>  Set SSR 0%% color");
     log_printf(LOG_LEVEL_INFO, "  config rgb100 <n>,<r>,<g>,<b>  Set SSR 100%% color");
     log_printf(LOG_LEVEL_INFO, "  config trans <ms>  Set transition time (100-10000ms)");
+    log_printf(LOG_LEVEL_INFO, "  config ssr_freq <freq>  Set SSR PWM frequency (0-10 Hz)");
 
     log_printf(LOG_LEVEL_INFO, "Debug:");
     log_printf(LOG_LEVEL_INFO, "  debug level <0-3>    Set debug level");
@@ -385,6 +386,14 @@ void SerialController::handleConfigCommand(const char* command) {
         log_printf(LOG_LEVEL_INFO, "- Status: %s", _config_manager->isSSRLinkEnabled() ? "Enabled" : "Disabled");
         log_printf(LOG_LEVEL_INFO, "- Transition Time: %d ms", _config_manager->getSSRLinkTransitionTime());
         
+        // SSR周波数設定
+        log_printf(LOG_LEVEL_INFO, "SSR PWM Frequencies:");
+        for (int i = 1; i <= 4; i++) {
+            uint8_t freq = _ssr_driver->getPWMFrequency(i);
+            log_printf(LOG_LEVEL_INFO, "- SSR%d: %d Hz", i, freq);
+        }
+        log_printf(LOG_LEVEL_INFO, "------------------------------------------");
+        
         // RGB LED色設定
         log_printf(LOG_LEVEL_INFO, "RGB LED Colors:");
         for (int i = 1; i <= 4; i++) {
@@ -408,8 +417,14 @@ void SerialController::handleConfigCommand(const char* command) {
         log_printf(LOG_LEVEL_INFO, "==========================================");
     }
     else if (strcmp(command, "save") == 0) {
+        // 現在のSSR周波数設定をConfigDataに反映（自動保存は無効）
+        for (int i = 1; i <= 4; i++) {
+            uint8_t current_freq = _ssr_driver->getPWMFrequency(i);
+            _config_manager->setSSRPWMFrequency(i, current_freq, false);
+        }
+        
         if (_config_manager->saveConfig()) {
-            log_printf(LOG_LEVEL_INFO, "Configuration saved successfully");
+            log_printf(LOG_LEVEL_INFO, "Configuration saved successfully (including current SSR frequencies)");
         } else {
             log_printf(LOG_LEVEL_ERROR, "Failed to save configuration");
         }
@@ -513,6 +528,19 @@ void SerialController::handleConfigCommand(const char* command) {
             log_printf(LOG_LEVEL_INFO, "Transition time set to %d ms", ms);
         } else {
             log_printf(LOG_LEVEL_ERROR, "Invalid format. Use: trans <ms>");
+        }
+    }
+    else if (strncmp(command, "ssr_freq ", 9) == 0) {
+        int freq;
+        if (sscanf(command + 9, "%d", &freq) == 1) {
+            if (freq >= 0 && freq <= 10) {
+                _config_manager->setSSRPWMFrequency(freq);
+                log_printf(LOG_LEVEL_INFO, "All SSR PWM frequencies set to %d Hz", freq);
+            } else {
+                log_printf(LOG_LEVEL_ERROR, "Invalid frequency. Must be 0-10 Hz");
+            }
+        } else {
+            log_printf(LOG_LEVEL_ERROR, "Invalid format. Use: ssr_freq <freq>");
         }
     }
     else {

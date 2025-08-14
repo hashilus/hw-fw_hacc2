@@ -58,7 +58,9 @@ bool ConfigManager::loadConfig(bool create_if_not_exist) {
     log_printf(LOG_LEVEL_DEBUG, "EEPROM Data:");
     log_printf(LOG_LEVEL_DEBUG, "SSR-LED Link: %s", _data.ssr_link_enabled ? "Enabled" : "Disabled");
     log_printf(LOG_LEVEL_DEBUG, "Transition Time: %d ms", _data.ssr_link_transition_ms);
-    log_printf(LOG_LEVEL_DEBUG, "SSR PWM Frequency: %d Hz", _data.ssr_pwm_frequency);
+    for (int i = 0; i < 4; i++) {
+        log_printf(LOG_LEVEL_DEBUG, "SSR%d PWM Frequency: %d Hz", i + 1, _data.ssr_pwm_frequency[i]);
+    }
     
     for (int i = 0; i < 4; i++) {
         log_printf(LOG_LEVEL_DEBUG, "LED%d 0%%: R=%d G=%d B=%d", 
@@ -129,15 +131,17 @@ bool ConfigManager::loadConfig(bool create_if_not_exist) {
     }
 
     // SSR周波数のバリデーション
-    log_printf(LOG_LEVEL_DEBUG, "Checking SSR PWM frequency: %d Hz", _data.ssr_pwm_frequency);
-    if (_data.ssr_pwm_frequency > 10) {
-        log_printf(LOG_LEVEL_WARN, "Invalid SSR PWM frequency: %d Hz", _data.ssr_pwm_frequency);
-        createDefaultConfig();
-        _used_default = true;
-        if (create_if_not_exist) {
-            return saveConfig();
+    for (int i = 0; i < 4; i++) {
+        log_printf(LOG_LEVEL_DEBUG, "Checking SSR%d PWM frequency: %d Hz", i + 1, _data.ssr_pwm_frequency[i]);
+        if (_data.ssr_pwm_frequency[i] > 10) {
+            log_printf(LOG_LEVEL_WARN, "Invalid SSR%d PWM frequency: %d Hz", i + 1, _data.ssr_pwm_frequency[i]);
+            createDefaultConfig();
+            _used_default = true;
+            if (create_if_not_exist) {
+                return saveConfig();
+            }
+            return false;
         }
-        return false;
     }
 
     // NETBIOS名のバリデーション
@@ -188,7 +192,10 @@ void ConfigManager::createDefaultConfig() {
     // SSR-LED連動設定
     _data.ssr_link_enabled = true;  // デフォルトで有効化
     _data.ssr_link_transition_ms = 1000;  // デフォルトは1秒
-    _data.ssr_pwm_frequency = 1; // SSR制御周波数デフォルト1Hz
+    // SSR制御周波数デフォルト1Hz（全チャンネル）
+    for (int i = 0; i < 4; i++) {
+        _data.ssr_pwm_frequency[i] = 1;
+    }
     
     // 各LEDの色設定
     for (int i = 0; i < 4; i++) {
@@ -394,7 +401,6 @@ void ConfigManager::printConfig() const {
     
     printNetworkConfig();
     printSSRLinkConfig();
-    log_printf(LOG_LEVEL_INFO, "SSR PWM Frequency: %d Hz", _data.ssr_pwm_frequency);
 }
 
 void ConfigManager::printNetworkConfig() const {
@@ -410,7 +416,6 @@ void ConfigManager::printNetworkConfig() const {
 void ConfigManager::printSSRLinkConfig() const {
     log_printf(LOG_LEVEL_INFO, "SSR-LED Link: %s", _data.ssr_link_enabled ? "Enabled" : "Disabled");
     log_printf(LOG_LEVEL_INFO, "Transition Time: %d ms", _data.ssr_link_transition_ms);
-    log_printf(LOG_LEVEL_INFO, "SSR PWM Frequency: %d Hz", _data.ssr_pwm_frequency);
     for (int i = 0; i < 4; i++) {
         log_printf(LOG_LEVEL_INFO, "LED%d 0%%: R=%d G=%d B=%d", i + 1, _data.ssr_link_colors_0[i].r, _data.ssr_link_colors_0[i].g, _data.ssr_link_colors_0[i].b);
         log_printf(LOG_LEVEL_INFO, "LED%d 100%%: R=%d G=%d B=%d", i + 1, _data.ssr_link_colors_100[i].r, _data.ssr_link_colors_100[i].g, _data.ssr_link_colors_100[i].b);

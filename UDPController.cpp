@@ -473,15 +473,19 @@ void UDPController::processCommand(const char* command, int length) {
             }
         } else if (strcmp(args, "status") == 0) {
             // 全体の周波数を読み取るコマンド（既存）
-            int freq = _config_manager->getSSRPWMFrequency();
-            snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR PWM frequency is %d Hz", freq);
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR PWM frequencies:");
             sendResponse(_send_buffer);
+            for (int i = 1; i <= 4; i++) {
+                int freq = _config_manager->getSSRPWMFrequency(i);
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR%d: %d Hz", i, freq);
+                sendResponse(_send_buffer);
+            }
         } else {
             // 周波数を設定するコマンド（既存）
             int freq = atoi(args);
             if (freq >= 0 && freq <= 10) {
                 _config_manager->setSSRPWMFrequency(freq);
-                snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR PWM frequency set to %d Hz", freq);
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "All SSR PWM frequencies set to %d Hz", freq);
                 sendResponse(_send_buffer);
             } else {
                 snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid frequency (0-10 Hz)");
@@ -495,8 +499,14 @@ void UDPController::processCommand(const char* command, int length) {
         sendResponse(_send_buffer);
     }
     else if (strcmp(cmd, "config save") == 0) {
+        // 現在のSSR周波数設定をConfigDataに反映（自動保存は無効）
+        for (int i = 1; i <= 4; i++) {
+            uint8_t current_freq = _ssr_driver.getPWMFrequency(i);
+            _config_manager->setSSRPWMFrequency(i, current_freq, false);
+        }
+        
         _config_manager->saveConfig();
-        snprintf(_send_buffer, MAX_BUFFER_SIZE, "Configuration saved");
+        snprintf(_send_buffer, MAX_BUFFER_SIZE, "Configuration saved (including current SSR frequencies)");
         sendResponse(_send_buffer);
     }
     else if (strncmp(cmd, "set ", 4) == 0) {

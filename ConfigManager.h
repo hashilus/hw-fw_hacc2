@@ -65,8 +65,25 @@ public:
     RGBColorData getSSRLinkColor100(int led_id) const;  // 100%時の色を取得
     RGBColorData calculateLEDColorForSSR(int led_id, int duty) const;  // デューティ比に応じた色を計算
 
-    uint16_t getSSRPWMFrequency() const { return _data.ssr_pwm_frequency; }
-    void setSSRPWMFrequency(uint16_t freq) { _data.ssr_pwm_frequency = freq; saveConfig(); }
+    uint8_t getSSRPWMFrequency(uint8_t channel = 0) const { 
+        if (channel >= 1 && channel <= 4) {
+            return _data.ssr_pwm_frequency[channel - 1]; 
+        }
+        return _data.ssr_pwm_frequency[0]; // デフォルトはチャンネル1
+    }
+    void setSSRPWMFrequency(uint8_t channel, uint8_t freq, bool auto_save = true) { 
+        if (channel >= 1 && channel <= 4) {
+            _data.ssr_pwm_frequency[channel - 1] = freq; 
+            if (auto_save) saveConfig(); 
+        }
+    }
+    void setSSRPWMFrequency(uint8_t freq, bool auto_save = true) { 
+        // 全チャンネルに同じ周波数を設定
+        for (int i = 0; i < 4; i++) {
+            _data.ssr_pwm_frequency[i] = freq; 
+        }
+        if (auto_save) saveConfig(); 
+    }
 
     void createDefaultConfig();
 
