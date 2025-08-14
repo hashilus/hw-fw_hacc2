@@ -293,6 +293,7 @@ void UDPController::processCommand(const char* command, int length) {
             "config trans status - Get transition time\n"
             "config ssr_freq <freq> - Set SSR PWM frequency\n"
             "config ssr_freq status - Get SSR PWM frequency\n"
+            "config ssr_freq status <id> - Get SSR PWM frequency for specific ID\n"
             "config load - Load configuration\n"
             "config save - Save configuration\n"
             "reboot - Reboot device\n"
@@ -453,13 +454,31 @@ void UDPController::processCommand(const char* command, int length) {
         }
     }
     else if (strncmp(cmd, "config ssr_freq ", 16) == 0) {
-        const char* value = cmd + 16;
-        if (strcmp(value, "status") == 0) {
+        const char* args = cmd + 16;
+        if (strncmp(args, "status ", 7) == 0) {
+            // 個別SSRの周波数を読み取るコマンド
+            int ssr_id;
+            if (sscanf(args + 7, "%d", &ssr_id) == 1) {
+                if (ssr_id >= 1 && ssr_id <= 4) {
+                    int freq = _ssr_driver.getPWMFrequency(ssr_id);
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR%d PWM frequency is %d Hz", ssr_id, freq);
+                    sendResponse(_send_buffer);
+                } else {
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid SSR ID (1-4)");
+                    sendResponse(_send_buffer);
+                }
+            } else {
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid command format");
+                sendResponse(_send_buffer);
+            }
+        } else if (strcmp(args, "status") == 0) {
+            // 全体の周波数を読み取るコマンド（既存）
             int freq = _config_manager->getSSRPWMFrequency();
             snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR PWM frequency is %d Hz", freq);
             sendResponse(_send_buffer);
         } else {
-            int freq = atoi(value);
+            // 周波数を設定するコマンド（既存）
+            int freq = atoi(args);
             if (freq >= 1 && freq <= 100) {
                 _config_manager->setSSRPWMFrequency(freq);
                 snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR PWM frequency set to %d Hz", freq);
