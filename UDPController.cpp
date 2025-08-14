@@ -399,7 +399,7 @@ void UDPController::processCommand(const char* command, int length) {
             // 設定色を読み取るコマンド
             int led_id;
             if (sscanf(args + 7, "%d", &led_id) == 1) {
-                if (led_id >= 1 && led_id <= 3) {
+                if (led_id >= 1 && led_id <= 4) {
                     RGBColorData color = _config_manager->getSSRLinkColor100(led_id);
                     snprintf(_send_buffer, MAX_BUFFER_SIZE, "LED%d 100%% color: R:%d G:%d B:%d", 
                         led_id, color.r, color.g, color.b);
