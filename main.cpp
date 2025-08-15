@@ -630,8 +630,11 @@ int main()
     
     // デバッグ情報表示用カウンター
     uint32_t debug_monitor_counter = 0;
-    uint32_t last_debug_power_freq = 0;
+    float last_debug_power_freq = 0.0f;
     uint32_t last_debug_on_time_us = 0;
+    
+    // 電源周波数デバッグ表示用カウンター
+    uint32_t power_freq_debug_counter = 0;
     
     // Main thread handles LED updates
     while (true) {
@@ -661,6 +664,19 @@ int main()
             kick_watchdog();
             watchdog_counter = 0;
         }
+        
+        // // 電源周波数デバッグ出力（2秒ごと）
+        // power_freq_debug_counter++;
+        // if (power_freq_debug_counter >= 50) {  // 10ms x 200 = 2000ms = 2秒
+        //     // ゼロクロス統計情報を取得して表示
+        //     uint32_t zerox_count, zerox_interval;
+        //     float zerox_frequency;
+        //     ssr.getZeroCrossStats(zerox_count, zerox_interval, zerox_frequency);
+        //     log_printf(LOG_LEVEL_DEBUG, "Zero-Cross Stats: Count=%lu, Interval=%lu us, Freq=%lu.%lu Hz", 
+        //                zerox_count, zerox_interval, (uint32_t)zerox_frequency, (uint32_t)(zerox_frequency * 100) % 100);
+            
+        //     power_freq_debug_counter = 0;
+        // }
         
         // Add short wait time to reduce CPU usage
         wait_us(10000);  // 10ms wait

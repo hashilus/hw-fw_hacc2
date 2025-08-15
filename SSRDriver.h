@@ -119,7 +119,18 @@ public:
      * Get zero-cross interval
      * @return Interval between zero-crosses in microseconds
      */
-    uint32_t getZeroCrossInterval() const { return _last_zerox_interval_us; }  // 立ち上がりエッジ間隔（マイクロ秒）
+    uint32_t getZeroCrossInterval() const { 
+        // 最新の間隔を計算
+        if (_zerox_history_index > 0) {
+            uint32_t current_index = (_zerox_history_index - 1 + FREQ_HISTORY_SIZE) % FREQ_HISTORY_SIZE;
+            uint32_t prev_index = (_zerox_history_index - 2 + FREQ_HISTORY_SIZE) % FREQ_HISTORY_SIZE;
+            
+            if (_zerox_timestamps[current_index] > 0 && _zerox_timestamps[prev_index] > 0) {
+                return _zerox_timestamps[current_index] - _zerox_timestamps[prev_index];
+            }
+        }
+        return 0;  // 立ち上がりエッジ間隔（マイクロ秒）
+    }
     
     /**
      * Get zero-cross count (for debugging)
@@ -157,12 +168,12 @@ public:
      * Get the current power line frequency
      * @return Current power line frequency (Hz)
      */
-    uint32_t getPowerLineFrequency();
+    float getPowerLineFrequency() const;
 
 
 
     /**
-     * ゼロクロス割り込みハンドラ（P3_9両エッジ）
+     * ゼロクロス割り込みハンドラ（立ち上がりエッジのみ）
      */
     void zeroxEdgeHandler();
     
@@ -170,6 +181,16 @@ public:
      * ゼロクロス制御ハンドラ（Tickerで呼び出し）
      */
     void zeroxControlHandler();
+    
+    /**
+     * 割り込み再有効化ハンドラ（15msec後に呼び出し）
+     */
+    void enableInterruptHandler();
+    
+    /**
+     * 遅延制御ハンドラ（電源周波数の半分の時間後に呼び出し）
+     */
+    void delayedControlHandler();
 
     /**
      * SSR制御の内部状態を更新（周期カウント等）
@@ -193,27 +214,31 @@ private:
 
 
 
-    // ゼロクロス検出用（両エッジ検出）
+    // ゼロクロス検出用（立ち上がりエッジのみ）
     InterruptIn _zerox_in{ZEROX_PIN};
     volatile bool _zerox_flag = false;
     Timer _zerox_timer; // ゼロクロス周期計測用
     uint32_t _zerox_count = 0;  // ゼロクロス検出回数（デバッグ用）
     
+    // 割り込み禁止制御用
+    volatile bool _interrupt_disabled = false;  // 割り込み禁止フラグ
+    Timeout _interrupt_enable_timeout;  // 割り込み再有効化用Timeout
+    
+    // 半波整流制御用
+    volatile bool _alternate_control = false;  // 交互制御フラグ（false=即座実行、true=遅延実行）
+    Timeout _delayed_control_timeout;  // 遅延制御用Timeout
+    
     // P8_11入力端子（将来の拡張用）
     DigitalIn* _p8_11_input;
     
-    // 立ち上がりエッジ間隔計算用
-    uint32_t _last_zerox_interval_us = 0;  // 最後の立ち上がりエッジ間隔（マイクロ秒）
-    uint32_t _last_rise_time_us = 0;       // 最後の立ち上がりエッジ時刻
-    
-    // ゼロクロス遅延計算用（両エッジ検出）
-    uint32_t _rise_time_us = 0;  // 立ち上がり時刻
-    uint32_t _fall_time_us = 0;  // 立ち下がり時刻
-    bool _waiting_for_fall = false;  // 立ち下がり待ちフラグ
-    uint32_t _zerox_delay_us = 0;  // 立ち上がりエッジからゼロクロス点までの遅延時間
+    // 電源周波数計算用（過去100回の割り込みから算出）
+    static const uint8_t FREQ_HISTORY_SIZE = 100;  // 履歴サイズ
+    uint32_t _zerox_timestamps[FREQ_HISTORY_SIZE];  // 割り込み時刻の履歴
+    uint8_t _zerox_history_index = 0;  // 履歴インデックス
+    uint32_t _last_rise_time_us = 0;   // 最後の立ち上がりエッジ時刻
     
     // デバッグ用変数（割り込み内で更新、メインループで出力）
-    volatile uint32_t _debug_power_freq = 0;  // 検出された商用電源周波数
+    volatile float _debug_power_freq = 0.0f;  // 検出された商用電源周波数
     volatile uint32_t _debug_on_time_us = 0;  // 計算されたON時間
     volatile uint32_t _debug_cycle_time_us = 0;  // 計算された周期時間
     
