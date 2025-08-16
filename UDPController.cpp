@@ -16,7 +16,7 @@
 UDPController::UDPController(SSRDriver& ssr_driver, RGBLEDDriver& rgb_led_driver, WS2812Driver& ws2812_driver, ConfigManager* config_manager)
     : _ssr_driver(ssr_driver), _rgb_led_driver(rgb_led_driver), _ws2812_driver(ws2812_driver),
       _packet_callback(nullptr), _command_callback(nullptr),
-      _config_manager(config_manager), _mist_active(false),
+      _config_manager(config_manager), _thread(nullptr), _mist_active(false),
       _mist_start_time(0), _mist_duration(0), _interface(nullptr),
       _running(false) {
     
@@ -31,9 +31,17 @@ UDPController::~UDPController() {
 }
 
 void UDPController::stop() {
+    log_printf(LOG_LEVEL_INFO, "UDPController::stop() called");
     _running = false;
-    if (_thread.get_state() == Thread::Running) {
-        _thread.join();
+    
+    // ソケットを閉じる
+    _socket.close();
+    log_printf(LOG_LEVEL_INFO, "UDP socket closed");
+    
+    if (_thread && _thread->get_state() == rtos::Thread::Running) {
+        log_printf(LOG_LEVEL_INFO, "Waiting for UDP thread to stop...");
+        _thread->join();
+        log_printf(LOG_LEVEL_INFO, "UDP thread stopped");
     }
 }
 
@@ -44,6 +52,18 @@ bool UDPController::init(NetworkInterface* interface) {
     }
 
     _interface = interface;
+    
+    // 既存のソケットがあれば閉じる
+    _socket.close();
+
+    // ネットワーク接続状態を確認
+    log_printf(LOG_LEVEL_INFO, "Checking network connection status...");
+    nsapi_connection_status_t status = _interface->get_connection_status();
+    if (status != NSAPI_STATUS_GLOBAL_UP) {
+        log_printf(LOG_LEVEL_ERROR, "Network is not connected (status: %d), waiting for connection...", status);
+        return false;
+    }
+    log_printf(LOG_LEVEL_INFO, "Network is connected (status: %d)", status);
 
     // Get UDP port from config manager
     int udp_port = UDP_PORT;  // デフォルト値
@@ -68,20 +88,21 @@ bool UDPController::init(NetworkInterface* interface) {
     }
     log_printf(LOG_LEVEL_INFO, "UDP socket opened successfully");
 
-    // Set socket buffer sizes
-    const int RECV_BUFFER_SIZE = 8192;  // 8KB
-    const int SEND_BUFFER_SIZE = 8192;  // 8KB
+    // Set socket buffer sizes (reduced for compatibility)
+    const int RECV_BUFFER_SIZE = 1024;  // 1KB
+    const int SEND_BUFFER_SIZE = 1024;  // 1KB
     
+    // Try to set socket buffer sizes (optional - will use default if fails)
     if (_socket.setsockopt(NSAPI_SOCKET, NSAPI_RCVBUF, &RECV_BUFFER_SIZE, sizeof(RECV_BUFFER_SIZE)) != 0) {
-        log_printf(LOG_LEVEL_WARN, "Failed to set receive buffer size");
+        log_printf(LOG_LEVEL_DEBUG, "Failed to set receive buffer size - using default");
     } else {
-        log_printf(LOG_LEVEL_INFO, "Receive buffer size set to %d bytes", RECV_BUFFER_SIZE);
+        log_printf(LOG_LEVEL_DEBUG, "Receive buffer size set to %d bytes", RECV_BUFFER_SIZE);
     }
     
     if (_socket.setsockopt(NSAPI_SOCKET, NSAPI_SNDBUF, &SEND_BUFFER_SIZE, sizeof(SEND_BUFFER_SIZE)) != 0) {
-        log_printf(LOG_LEVEL_WARN, "Failed to set send buffer size");
+        log_printf(LOG_LEVEL_DEBUG, "Failed to set send buffer size - using default");
     } else {
-        log_printf(LOG_LEVEL_INFO, "Send buffer size set to %d bytes", SEND_BUFFER_SIZE);
+        log_printf(LOG_LEVEL_DEBUG, "Send buffer size set to %d bytes", SEND_BUFFER_SIZE);
     }
 
     // Set socket timeout to 500ms for better reliability
@@ -110,19 +131,95 @@ bool UDPController::init(NetworkInterface* interface) {
 }
 
 bool UDPController::run() {
-    if (_running) {
-        log_printf(LOG_LEVEL_WARN, "UDP thread is already running");
+    log_printf(LOG_LEVEL_INFO, "UDPController::run() called");
+    
+    // 既存のスレッドが実行中の場合は停止を待つ
+    if (_thread && _thread->get_state() == rtos::Thread::Running) {
+        log_printf(LOG_LEVEL_WARN, "Waiting for existing UDP thread to stop...");
+        _running = false;  // 停止フラグを設定
+        _thread->join();
+        log_printf(LOG_LEVEL_INFO, "Existing UDP thread stopped");
+    }
+    
+    // スレッドがDeleted状態または存在しない場合は新しいスレッドを作成
+    if (!_thread || _thread->get_state() == rtos::Thread::Deleted) {
+        log_printf(LOG_LEVEL_WARN, "UDP thread is in Deleted state, creating new thread");
+        // 新しいスレッドオブジェクトを作成
+        _thread = std::make_unique<rtos::Thread>();
+    }
+
+    // UDPソケットを初期化
+    if (!_interface) {
+        log_printf(LOG_LEVEL_ERROR, "Network interface is not available for UDP initialization");
+        return false;
+    }
+    
+    log_printf(LOG_LEVEL_INFO, "Initializing UDP socket before starting thread...");
+    if (!init(_interface)) {
+        log_printf(LOG_LEVEL_ERROR, "Failed to initialize UDP socket");
         return false;
     }
 
+    log_printf(LOG_LEVEL_INFO, "Setting _running = true and starting thread...");
     _running = true;
-    _thread.start(callback(this, &UDPController::_thread_func));
+    log_printf(LOG_LEVEL_INFO, "About to call _thread.start()...");
+    _thread->start(callback(this, &UDPController::_thread_func));
+    log_printf(LOG_LEVEL_INFO, "_thread.start() completed");
     log_printf(LOG_LEVEL_INFO, "UDP thread started");
     return true;
 }
 
 void UDPController::_thread_func() {
     log_printf(LOG_LEVEL_INFO, "UDP thread started");
+    
+    // ネットワーク接続を待つ
+    log_printf(LOG_LEVEL_INFO, "Waiting for network connection...");
+    while (_running && _interface->get_connection_status() != NSAPI_STATUS_GLOBAL_UP) {
+        ThisThread::sleep_for(1s);
+    }
+    
+    if (!_running) {
+        log_printf(LOG_LEVEL_INFO, "UDP thread stopped while waiting for network");
+        return;
+    }
+    
+    log_printf(LOG_LEVEL_INFO, "Network connected, checking UDP socket status...");
+    
+    // UDPソケットが既に初期化されているかチェック
+    if (!_interface) {
+        log_printf(LOG_LEVEL_ERROR, "Network interface is not available");
+        return;
+    }
+    
+    // ソケットが開いているかチェック
+    if (_socket.recvfrom(NULL, NULL, 0) == NSAPI_ERROR_NO_SOCKET) {
+        log_printf(LOG_LEVEL_WARN, "UDP socket is not ready, reinitializing...");
+        
+        // UDPソケットを再初期化
+        int init_attempts = 0;
+        const int MAX_INIT_ATTEMPTS = 3;
+        
+        while (_running && init_attempts < MAX_INIT_ATTEMPTS) {
+            if (init(_interface)) {
+                log_printf(LOG_LEVEL_INFO, "UDP socket reinitialized successfully");
+                break;
+            } else {
+                init_attempts++;
+                log_printf(LOG_LEVEL_ERROR, "Failed to reinitialize UDP socket (attempt %d/%d)", init_attempts, MAX_INIT_ATTEMPTS);
+                if (init_attempts < MAX_INIT_ATTEMPTS) {
+                    log_printf(LOG_LEVEL_INFO, "Retrying in 2 seconds...");
+                    ThisThread::sleep_for(2s);
+                }
+            }
+        }
+        
+        if (init_attempts >= MAX_INIT_ATTEMPTS) {
+            log_printf(LOG_LEVEL_ERROR, "Failed to reinitialize UDP socket after %d attempts", MAX_INIT_ATTEMPTS);
+            return;
+        }
+    } else {
+        log_printf(LOG_LEVEL_INFO, "UDP socket is already ready");
+    }
     
     // Connection status counter
     int packet_count = 0;
@@ -413,7 +510,7 @@ void UDPController::processCommand(const char* command, int length) {
                         led_id, color.r, color.g, color.b);
                     sendResponse(_send_buffer);
                 } else {
-                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid LED ID (1-3)");
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid LED ID (1-4)");
                     sendResponse(_send_buffer);
                 }
             } else {
@@ -424,7 +521,7 @@ void UDPController::processCommand(const char* command, int length) {
             // 設定色を設定するコマンド（既存）
             int led_id, r, g, b;
             if (sscanf(args, "%d,%d,%d,%d", &led_id, &r, &g, &b) == 4) {
-                if (led_id >= 1 && led_id <= 3 &&
+                if (led_id >= 1 && led_id <= 4 &&
                     r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
                     _config_manager->setSSRLinkColor100(led_id, r, g, b);
                     snprintf(_send_buffer, MAX_BUFFER_SIZE, "LED%d 100%% color set to R:%d G:%d B:%d", 

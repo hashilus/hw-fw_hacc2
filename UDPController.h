@@ -48,7 +48,7 @@ public:
     
 private:
     // スレッド関連
-    Thread _thread;
+    std::unique_ptr<rtos::Thread> _thread;
     bool _running;
     void _thread_func();  // スレッドのメイン関数
 
@@ -93,6 +93,7 @@ private:
     void (*_command_callback)(const char*);
     
     // UDP通信
+    NetworkInterface* _interface;  // ネットワークインターフェース
     UDPSocket _socket;
     SocketAddress _remote_addr;
     char _recv_buffer[MAX_BUFFER_SIZE];
@@ -102,6 +103,4 @@ private:
     bool _mist_active;
     uint32_t _mist_start_time;
     uint32_t _mist_duration;
-    
-    NetworkInterface* _interface;
 }; 

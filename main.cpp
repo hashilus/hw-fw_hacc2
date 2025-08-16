@@ -17,11 +17,14 @@
 #include "lwip/netif.h"
 #include "lwip/ip4.h"
 #include "rtos.h"
+#include "rtos/Thread.h"
+#include "cmsis_os.h"
 #include "lwip/init.h"
 #include "lwip/opt.h"
 #include "BufferedSerial.h"
 #include "EthernetInterface.h"
 #include <memory>  // std::unique_ptr用
+#include <cstring> // strlen用
 #include "iodefine.h"
 
 // SSRの数とRGB LEDの数
@@ -30,6 +33,9 @@
 
 // スリープ時間の単位を定義（C++11以降の時間リテラル用）
 using namespace std::chrono;
+
+// グローバル変数としてUDPスレッドを宣言
+rtos::Thread* udp_thread = nullptr;
 
 // シリアル通信
 static BufferedSerial pc(USBTX, USBRX, 115200);
@@ -46,7 +52,8 @@ enum SystemStatus {
     STATUS_ERROR,           // エラー状態（オレンジ色点滅）
     STATUS_PACKET_RECEIVED, // パケット受信（紫色、一時的）
     STATUS_COMMAND_EXEC,    // コマンド実行中（オレンジ色、一時的）
-    STATUS_SSR_ACTIVE       // SSR出力中（赤色点灯）
+    STATUS_SSR_ACTIVE,      // SSR出力中（赤色点灯）
+    STATUS_NETWORK_DOWN     // ネットワーク未接続（青色点滅）
 };
 
 // 現在のシステムステータス
@@ -178,12 +185,25 @@ void led_status_thread() {
                 led_b = 0;
                 break;
                 
-            case STATUS_SSR_ACTIVE:
-                // 赤色点灯
-                led_r = 1;
-                led_g = 0;
-                led_b = 0;
-                break;
+                    case STATUS_SSR_ACTIVE:
+            // 赤色点灯
+            led_r = 1;
+            led_g = 0;
+            led_b = 0;
+            break;
+            
+        case STATUS_NETWORK_DOWN:
+            // 青色点滅
+            led_r = 0;
+            led_g = 0;
+            led_b = blink_state;
+            // 1秒ごとに点滅
+            blink_counter++;
+            if (blink_counter >= 10) {  // 50ms x 10 = 500ms
+                blink_state = !blink_state;
+                blink_counter = 0;
+            }
+            break;
         }
         
         wait_us(50000);  // 50ms待機
@@ -226,7 +246,6 @@ void log_printf(int level, const char* format, ...) {
     
     // バッファサイズチェック
     if (size < 0 || size >= static_cast<int>(sizeof(buffer))) {
-        safe_printf("[ERROR] Buffer overflow in log_printf");
         serial_mutex.unlock();
         return;
     }
@@ -272,7 +291,25 @@ void log_printf(int level, const char* format, ...) {
     }
     
     // カラーコード付きで出力
-    safe_printf("[%s] %s%s\033[0m", level_str, color_code, buffer);
+    char output_buffer[512];
+    snprintf(output_buffer, sizeof(output_buffer), "[%s] %s%s\033[0m", level_str, color_code, buffer);
+    
+    // 出力を128バイトのチャンクに分割して送信
+    const size_t chunk_size = 128;
+    size_t len = strlen(output_buffer);
+    size_t remaining = len;
+    size_t offset = 0;
+    
+    while (remaining > 0) {
+        size_t to_send = (remaining > chunk_size) ? chunk_size : remaining;
+        pc.write(output_buffer + offset, to_send);
+        offset += to_send;
+        remaining -= to_send;
+        wait_us(1000);  // 1ms待機
+    }
+    
+    // 改行を追加
+    pc.write("\n", 1);
     
     serial_mutex.unlock();
 }
@@ -341,11 +378,8 @@ void init_network() {
         }
     }
 
-    // ネットワークに接続
-    if (!network_manager->connect()) {
-        log_printf(LOG_LEVEL_ERROR, "Network connection failed");
-        return;
-    }
+    // ネットワーク接続はメインループ内で行うため、ここでは初期化のみ
+    log_printf(LOG_LEVEL_INFO, "Network manager initialized - connection will be attempted in main loop");
 
     // ネットワーク接続の確認
     NetworkInterface* interface = network_manager->get_interface();
@@ -455,7 +489,7 @@ int main()
     led_b = 0;
     
     // ステータスLED表示スレッドの開始
-    Thread led_thread(osPriorityNormal, 1024);
+    rtos::Thread led_thread(osPriorityNormal, 1024);
     led_thread.start(led_status_thread);
     
     // システムステータスを初期化中に設定
@@ -477,6 +511,25 @@ int main()
     ws2812_driver = std::make_unique<WS2812Driver>();
     kick_watchdog();  // 初期化中にkick
     
+    // Load configuration from EEPROM first (ConfigManagerのコンストラクタで既に読み込み済み)
+    log_printf(LOG_LEVEL_INFO, "Configuration loaded from EEPROM");
+    kick_watchdog();  // 設定読み込み確認後にkick
+    
+    // Apply SSR PWM frequency from configuration
+    log_printf(LOG_LEVEL_INFO, "Applying SSR PWM frequency from configuration...");
+    kick_watchdog();  // SSR周波数適用開始前にkick
+    
+    for (int i = 1; i <= 4; i++) {
+        uint8_t saved_freq = config_manager->getSSRPWMFrequency(i);
+        if (ssr.setPWMFrequency(i, saved_freq)) {
+            log_printf(LOG_LEVEL_INFO, "- SSR%d PWM Frequency: %d Hz (applied)", i, saved_freq);
+        } else {
+            log_printf(LOG_LEVEL_WARN, "- SSR%d PWM Frequency: %d Hz (failed to apply, using default)", i, saved_freq);
+        }
+    }
+    log_printf(LOG_LEVEL_INFO, "------------------------------------------");
+    kick_watchdog();  // SSR周波数適用後にkick
+    
     // Initialize network manager
     log_printf(LOG_LEVEL_INFO, "Initializing network manager...");
     network_manager = std::make_unique<NetworkManager>(config_manager.get());
@@ -492,10 +545,6 @@ int main()
     serial_controller.set_config_manager(config_manager.get());
     serial_controller.set_rgb_led_driver(rgb_led.get());
     kick_watchdog();  // 初期化中にkick
-    
-    // Load configuration from EEPROM (ConfigManagerのコンストラクタで既に読み込み済み)
-    log_printf(LOG_LEVEL_DEBUG, "Configuration already loaded in ConfigManager constructor");
-    kick_watchdog();  // 設定読み込み確認後にkick
     
     // MACアドレスはEEPROMから自動的に読み込まれ、mbed_mac_address関数で設定される
     log_printf(LOG_LEVEL_INFO, "Network Settings:");
@@ -544,21 +593,6 @@ int main()
     log_printf(LOG_LEVEL_INFO, "------------------------------------------");
     kick_watchdog();  // SSR-LED設定表示後にkick
     
-    // Apply SSR PWM frequency from configuration
-    log_printf(LOG_LEVEL_INFO, "Applying SSR PWM frequency from configuration...");
-    kick_watchdog();  // SSR周波数適用開始前にkick
-    
-    for (int i = 1; i <= 4; i++) {
-        uint8_t saved_freq = config_manager->getSSRPWMFrequency(i);
-        if (ssr.setPWMFrequency(i, saved_freq)) {
-            log_printf(LOG_LEVEL_INFO, "- SSR%d PWM Frequency: %d Hz (applied)", i, saved_freq);
-        } else {
-            log_printf(LOG_LEVEL_WARN, "- SSR%d PWM Frequency: %d Hz (failed to apply, using default)", i, saved_freq);
-        }
-    }
-    log_printf(LOG_LEVEL_INFO, "------------------------------------------");
-    kick_watchdog();  // SSR周波数適用後にkick
-    
     // Display communication interfaces
     log_printf(LOG_LEVEL_INFO, "Communication Interfaces:");
     log_printf(LOG_LEVEL_INFO, "- UDP: Port %d", config_manager->getUDPPort());
@@ -606,17 +640,51 @@ int main()
     // Start command processing loop
     log_printf(LOG_LEVEL_INFO, "Starting command processing...");
     
-    // Run UDP controller and serial controller in separate threads
-    rtos::Thread udp_thread;
+    // Run serial controller in separate thread (immediately)
     rtos::Thread serial_thread;
-    
-    udp_thread.start([]() {
-        udp_controller->run();
-    });
-    
     serial_thread.start([]() {
         serial_controller.run();
     });
+    
+    // UDP controller will be started after network connection is established
+    bool udp_started = false;
+    
+    // ネットワーク接続監視用カウンター
+    uint32_t network_monitor_counter = 0;
+    bool last_network_status = false;
+    
+    // 初期ネットワーク接続状態を設定
+    last_network_status = network_manager->isConnected();
+    
+    // 初期ネットワーク接続を試行（起動時の接続失敗に対応）
+    if (!last_network_status) {
+        log_printf(LOG_LEVEL_INFO, "Attempting initial network connection...");
+        if (network_manager->connect()) {
+            log_printf(LOG_LEVEL_INFO, "Initial network connection successful");
+            last_network_status = true;
+        } else {
+            log_printf(LOG_LEVEL_WARN, "Initial network connection failed - will retry in main loop");
+            last_network_status = false;
+        }
+    }
+    
+    // ネットワークが接続されている場合はUDPControllerを開始
+    if (last_network_status && !udp_started) {
+        log_printf(LOG_LEVEL_INFO, "Network connected, starting UDP controller...");
+        
+        // ネットワークインターフェースをUDPコントローラーに設定
+        NetworkInterface* interface = network_manager->get_interface();
+        if (interface) {
+            udp_controller->init(interface);
+            udp_thread = new rtos::Thread(); // 新しいスレッドオブジェクトを作成
+            udp_thread->start([]() {
+                udp_controller->run();
+            });
+            udp_started = true;
+        } else {
+            log_printf(LOG_LEVEL_ERROR, "Network interface not available for UDP controller");
+        }
+    }
     
     // システムステータスを準備完了に設定
     update_status_led(STATUS_READY);
@@ -650,11 +718,137 @@ int main()
             }
         }
         
-        // SSR出力状態に応じてステータスLEDを更新
-        if (ssr_active) {
+        // ネットワーク接続状態を監視（5秒ごと）
+        network_monitor_counter++;
+        if (network_monitor_counter >= 500) {  // 10ms x 500 = 5000ms = 5秒
+            bool current_network_status = network_manager->isConnected();
+            
+            // ネットワーク接続状態が変化した場合、または再接続後の状態確認
+            if (current_network_status != last_network_status || 
+                (current_network_status && !udp_started)) {
+                if (current_network_status) {
+                    log_printf(LOG_LEVEL_INFO, "Network connection restored");
+                    
+                                            // ネットワーク接続が確立されたらUDPControllerを開始
+                        if (!udp_started) {
+                            log_printf(LOG_LEVEL_INFO, "Starting UDP controller...");
+                            // 既存のスレッドが実行中の場合は停止を待つ
+                            if (udp_thread && udp_thread->get_state() == rtos::Thread::Running) {
+                                log_printf(LOG_LEVEL_WARN, "Waiting for existing UDP thread to stop...");
+                                udp_thread->join();
+                            }
+                            log_printf(LOG_LEVEL_INFO, "Starting UDP thread...");
+                            log_printf(LOG_LEVEL_INFO, "UDP thread state before start: %d", (int)udp_thread->get_state());
+                            
+                            // スレッドがDeleted状態の場合はスレッドを適切に停止
+                            if (udp_thread->get_state() == rtos::Thread::Deleted) {
+                                log_printf(LOG_LEVEL_WARN, "UDP thread is in Deleted state, attempting to join");
+                                udp_thread->join();
+                                // Deleted状態のスレッドは再利用できないため、新しいスレッドオブジェクトを作成
+                                log_printf(LOG_LEVEL_WARN, "Creating new UDP thread object");
+                                delete udp_thread;
+                                udp_thread = new rtos::Thread();
+                            }
+                            
+                            udp_thread->start([]() {
+                                log_printf(LOG_LEVEL_INFO, "UDP thread lambda started");
+                                log_printf(LOG_LEVEL_INFO, "About to call udp_controller->run()");
+                                bool result = udp_controller->run();
+                                log_printf(LOG_LEVEL_INFO, "UDP controller run() returned: %s", result ? "true" : "false");
+                            });
+                            udp_started = true;
+                            log_printf(LOG_LEVEL_INFO, "UDP thread start() called, udp_started set to true");
+                            log_printf(LOG_LEVEL_INFO, "UDP thread state after start: %d", (int)udp_thread->get_state());
+                        }
+                } else {
+                    log_printf(LOG_LEVEL_WARN, "Network connection lost, stopping UDP controller...");
+                    
+                    // UDPControllerを停止
+                    if (udp_started) {
+                        udp_controller->stop();
+                        if (udp_thread) {
+                            log_printf(LOG_LEVEL_INFO, "Waiting for UDP thread to stop...");
+                            udp_thread->join();
+                            log_printf(LOG_LEVEL_INFO, "UDP thread stopped");
+                        }
+                        udp_started = false;
+                        log_printf(LOG_LEVEL_INFO, "UDP controller stopped");
+                    }
+                    
+                    log_printf(LOG_LEVEL_WARN, "Attempting network reconnection...");
+                    
+                    // 強制的にネットワークを切断
+                    network_manager->disconnect();
+                    ThisThread::sleep_for(2s);  // 切断完了を待機
+                    
+                    // 再接続を試行（複数回試行）
+                    bool reconnection_success = false;
+                    for (int retry = 0; retry < 3; retry++) {
+                        log_printf(LOG_LEVEL_INFO, "Reconnection attempt %d/3", retry + 1);
+                        if (network_manager->connect()) {
+                            log_printf(LOG_LEVEL_INFO, "Network reconnection successful");
+                            current_network_status = true;
+                            reconnection_success = true;
+                            break;
+                        } else {
+                            log_printf(LOG_LEVEL_WARN, "Reconnection attempt %d failed", retry + 1);
+                            if (retry < 2) {
+                                ThisThread::sleep_for(3s);  // 3秒待機してから再試行
+                            }
+                        }
+                    }
+                    
+                    if (!reconnection_success) {
+                        log_printf(LOG_LEVEL_ERROR, "Network reconnection failed after all attempts");
+                        current_network_status = false;
+                    } else {
+                        // 再接続成功後にUDPControllerを再起動
+                        if (!udp_started) {
+                            log_printf(LOG_LEVEL_INFO, "Restarting UDP controller after reconnection...");
+                            
+                            // ネットワークインターフェースをUDPコントローラーに設定
+                            NetworkInterface* interface = network_manager->get_interface();
+                            if (interface) {
+                                udp_controller->init(interface);
+                                
+                                // 既存のスレッドオブジェクトをクリーンアップ
+                                if (udp_thread) {
+                                    delete udp_thread;
+                                    udp_thread = nullptr;
+                                }
+                                
+                                // 新しいスレッドオブジェクトを作成
+                                udp_thread = new rtos::Thread();
+                                log_printf(LOG_LEVEL_INFO, "Created new UDP thread object");
+                                
+                                udp_thread->start([]() {
+                                    log_printf(LOG_LEVEL_INFO, "UDP thread lambda started");
+                                    log_printf(LOG_LEVEL_INFO, "About to call udp_controller->run()");
+                                    bool result = udp_controller->run();
+                                    log_printf(LOG_LEVEL_INFO, "UDP controller run() returned: %s", result ? "true" : "false");
+                                });
+                                udp_started = true;
+                                log_printf(LOG_LEVEL_INFO, "UDP thread start() called, udp_started set to true");
+                                log_printf(LOG_LEVEL_INFO, "UDP thread state after start: %d", (int)udp_thread->get_state());
+                            } else {
+                                log_printf(LOG_LEVEL_ERROR, "Network interface not available for UDP controller restart");
+                            }
+                        }
+                    }
+                }
+                last_network_status = current_network_status;
+            }
+            
+            network_monitor_counter = 0;
+        }
+        
+        // ネットワーク接続状態に応じてステータスLEDを更新
+        if (!network_manager->isConnected()) {
+            update_status_led(STATUS_NETWORK_DOWN);
+        } else if (ssr_active) {
             update_status_led(STATUS_SSR_ACTIVE);
         } else {
-            // SSRが出力していない場合は通常状態に戻す
+            // ネットワーク接続済みでSSRが出力していない場合は通常状態
             update_status_led(STATUS_READY);
         }
         

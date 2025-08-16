@@ -9,7 +9,7 @@
 #define TRACE_GROUP "NETM"
 
 NetworkManager::NetworkManager(ConfigManager* config_manager)
-    : _config_manager(config_manager), _connected(false), _running(false) {
+    : _config_manager(config_manager), _connected(false), _last_sync_time(0), _running(false) {
     memset(_ip_address, 0, sizeof(_ip_address));
     memset(_netmask, 0, sizeof(_netmask));
     memset(_gateway, 0, sizeof(_gateway));
@@ -102,9 +102,40 @@ bool NetworkManager::set_network(const uint8_t* ip, const uint8_t* netmask, cons
 }
 
 bool NetworkManager::connect() {
-    if (_connected) {
-        log_printf(LOG_LEVEL_WARN, "Already connected");
+    // 実際の接続状態を確認
+    nsapi_connection_status_t current_status = _interface.get_connection_status();
+    log_printf(LOG_LEVEL_DEBUG, "Current network status before connect: %d", current_status);
+    
+    if (current_status == NSAPI_STATUS_GLOBAL_UP) {
+        log_printf(LOG_LEVEL_INFO, "Already connected (status: %d)", current_status);
+        _connected = true;
+        _update_network_info();
         return true;
+    } else if (current_status == NSAPI_STATUS_CONNECTING) {
+        log_printf(LOG_LEVEL_INFO, "Network is connecting (status: %d), waiting for completion...", current_status);
+        // 接続完了を待機
+        int wait_count = 0;
+        const int MAX_WAIT = 30; // 30秒待機
+        while (wait_count < MAX_WAIT) {
+            ThisThread::sleep_for(1s);
+            current_status = _interface.get_connection_status();
+            log_printf(LOG_LEVEL_DEBUG, "Connection status after %d seconds: %d", wait_count + 1, current_status);
+            
+            if (current_status == NSAPI_STATUS_GLOBAL_UP) {
+                log_printf(LOG_LEVEL_INFO, "Connection completed successfully (status: %d)", current_status);
+                _connected = true;
+                _update_network_info();
+                return true;
+            } else if (current_status == NSAPI_STATUS_DISCONNECTED) {
+                log_printf(LOG_LEVEL_WARN, "Connection failed (status: %d)", current_status);
+                _connected = false;
+                break;
+            }
+            wait_count++;
+        }
+        log_printf(LOG_LEVEL_ERROR, "Connection timeout after %d seconds (status: %d)", MAX_WAIT, current_status);
+        _connected = false;
+        return false;
     }
     
     log_printf(LOG_LEVEL_INFO, "Connecting to network...");
@@ -118,6 +149,14 @@ bool NetworkManager::connect() {
         log_printf(LOG_LEVEL_INFO, "Disconnecting existing connection...");
         _interface.disconnect();
         ThisThread::sleep_for(3s);  // 3秒待機してハードウェアをリセット
+        
+        // 切断後の状態を確認
+        status = _interface.get_connection_status();
+        log_printf(LOG_LEVEL_DEBUG, "Network status after disconnect: %d", status);
+        
+        if (status != NSAPI_STATUS_DISCONNECTED) {
+            log_printf(LOG_LEVEL_WARN, "Network may not be fully disconnected (status: %d)", status);
+        }
     }
     
     // 接続試行回数の制限
@@ -150,8 +189,39 @@ bool NetworkManager::connect() {
                 log_printf(LOG_LEVEL_INFO, "MAC address: %s", _mac_address);
                 
                 return true;
+            } else if (status == NSAPI_STATUS_CONNECTING) {
+                log_printf(LOG_LEVEL_INFO, "Connection in progress (status: %d), waiting for completion...", status);
+                // 接続完了を待機
+                int wait_count = 0;
+                const int MAX_WAIT = 30; // 30秒待機
+                while (wait_count < MAX_WAIT) {
+                    ThisThread::sleep_for(1s);
+                    status = _interface.get_connection_status();
+                    log_printf(LOG_LEVEL_DEBUG, "Connection status after %d seconds: %d", wait_count + 1, status);
+                    
+                    if (status == NSAPI_STATUS_GLOBAL_UP) {
+                        _connected = true;
+                        _update_network_info();
+                        
+                        log_printf(LOG_LEVEL_INFO, "Connection completed successfully");
+                        log_printf(LOG_LEVEL_INFO, "IP address: %s", _ip_address);
+                        log_printf(LOG_LEVEL_INFO, "Netmask: %s", _netmask);
+                        log_printf(LOG_LEVEL_INFO, "Gateway: %s", _gateway);
+                        log_printf(LOG_LEVEL_INFO, "MAC address: %s", _mac_address);
+                        
+                        return true;
+                    } else if (status == NSAPI_STATUS_DISCONNECTED) {
+                        log_printf(LOG_LEVEL_WARN, "Connection failed during wait (status: %d)", status);
+                        _connected = false;
+                        break;
+                    }
+                    wait_count++;
+                }
+                log_printf(LOG_LEVEL_ERROR, "Connection timeout after %d seconds (status: %d)", MAX_WAIT, status);
+                _connected = false;
             } else {
                 log_printf(LOG_LEVEL_WARN, "Connection established but status is %d", status);
+                _connected = false;
             }
         } else if (result == NSAPI_ERROR_BUSY) {
             log_printf(LOG_LEVEL_WARN, "Network device is busy, waiting...");
@@ -165,20 +235,62 @@ bool NetworkManager::connect() {
     }
     
     log_printf(LOG_LEVEL_ERROR, "Failed to connect after %d attempts", MAX_RETRIES);
+    _connected = false;
     return false;
 }
 
 void NetworkManager::disconnect() {
-    if (!_connected) {
-        return;
-    }
-    
     log_printf(LOG_LEVEL_INFO, "Disconnecting from network...");
     
-    _interface.disconnect();
-    _connected = false;
+    // 実際の接続状態を確認
+    nsapi_connection_status_t current_status = _interface.get_connection_status();
+    log_printf(LOG_LEVEL_DEBUG, "Network status before disconnect: %d", current_status);
     
-    log_printf(LOG_LEVEL_INFO, "Disconnected from network");
+    if (current_status != NSAPI_STATUS_DISCONNECTED) {
+        _interface.disconnect();
+        ThisThread::sleep_for(1s);  // 切断完了を待機
+        
+        // 切断後の状態を確認
+        current_status = _interface.get_connection_status();
+        log_printf(LOG_LEVEL_DEBUG, "Network status after disconnect: %d", current_status);
+        
+        if (current_status == NSAPI_STATUS_DISCONNECTED) {
+            log_printf(LOG_LEVEL_INFO, "Successfully disconnected from network");
+        } else {
+            log_printf(LOG_LEVEL_WARN, "Disconnect may not have completed (status: %d)", current_status);
+        }
+    } else {
+        log_printf(LOG_LEVEL_INFO, "Already disconnected");
+    }
+    
+    _connected = false;
+}
+
+bool NetworkManager::isConnected() const {
+    // 実際の接続状態を確認
+    nsapi_connection_status_t status = _interface.get_connection_status();
+    bool actually_connected = (status == NSAPI_STATUS_GLOBAL_UP);
+    
+    // _connectedフラグと実際の状態が異なる場合はログ出力して同期
+    if (_connected != actually_connected) {
+        uint32_t current_time = std::chrono::duration_cast<std::chrono::milliseconds>(Kernel::Clock::now().time_since_epoch()).count();
+        
+        // 前回の同期から5秒以上経過している場合のみ警告を出力
+        if (current_time - _last_sync_time > 5000) {
+            log_printf(LOG_LEVEL_WARN, "Connection state mismatch: _connected=%d, actual_status=%d (%s), synchronizing...", 
+                       _connected, status, 
+                       status == NSAPI_STATUS_LOCAL_UP ? "LOCAL_UP" :
+                       status == NSAPI_STATUS_GLOBAL_UP ? "GLOBAL_UP" :
+                       status == NSAPI_STATUS_DISCONNECTED ? "DISCONNECTED" :
+                       status == NSAPI_STATUS_CONNECTING ? "CONNECTING" : "UNKNOWN");
+            _last_sync_time = current_time;
+        }
+        
+        // _connectedフラグを実際の状態に同期
+        _connected = actually_connected;
+    }
+    
+    return actually_connected;
 }
 
 void NetworkManager::_update_network_info() {

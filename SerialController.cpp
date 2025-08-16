@@ -225,7 +225,7 @@ void SerialController::displayHelp() {
     log_printf(LOG_LEVEL_INFO, "  config gateway <gw>  Set gateway");
     log_printf(LOG_LEVEL_INFO, "  config dhcp on/off   Enable/disable DHCP");
     log_printf(LOG_LEVEL_INFO, "  config rgb0 <n>,<r>,<g>,<b>  Set SSR 0%% color");
-    log_printf(LOG_LEVEL_INFO, "  config rgb100 <n>,<r>,<g>,<b>  Set SSR 100%% color");
+    log_printf(LOG_LEVEL_INFO, "  config rgb100 <n>,<r>,<g>,<b>  Set LED 100%% color (n: 1-4)");
     log_printf(LOG_LEVEL_INFO, "  config trans <ms>  Set transition time (100-10000ms)");
     log_printf(LOG_LEVEL_INFO, "  config ssr_freq <freq>  Set SSR PWM frequency (0-10 Hz)");
 

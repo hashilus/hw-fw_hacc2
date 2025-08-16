@@ -66,8 +66,8 @@ UDPコマンドは、デバイスのIPアドレスとポート（デフォルト
 - `config ssrlink status` - SSR-LED連動の状態を表示
 - `config rgb0 <led_id>,<r>,<g>,<b>` - LEDの0%時の色を設定（led_id: 1-4）
 - `config rgb0 status <led_id>` - LEDの0%時の色を読み取り（led_id: 1-4）
-- `config rgb100 <led_id>,<r>,<g>,<b>` - LEDの100%時の色を設定（led_id: 1-3）
-- `config rgb100 status <led_id>` - LEDの100%時の色を読み取り（led_id: 1-3）
+- `config rgb100 <led_id>,<r>,<g>,<b>` - LEDの100%時の色を設定（led_id: 1-4）
+- `config rgb100 status <led_id>` - LEDの100%時の色を読み取り（led_id: 1-4）
 - `config trans <ms>` - トランジション時間を設定（100-10000ms）
 
 #### デバッグ
@@ -271,7 +271,7 @@ SSR-LED連動機能により、SSR1のデューティ比に応じてRGB LEDの�
 ### 設定項目
 - **SSR-LED連動**: 有効/無効の切り替え
 - **0%時の色**: SSR出力0%時のRGB LEDの色（LED1-4）
-- **100%時の色**: SSR出力100%時のRGB LEDの色（LED1-3）
+- **100%時の色**: SSR出力100%時のRGB LEDの色（LED1-4）
 - **トランジション時間**: 色変化にかける時間（100-10000ms）
 
 ### 使用例

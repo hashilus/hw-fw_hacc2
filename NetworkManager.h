@@ -13,7 +13,7 @@ public:
     bool init();
     bool connect();
     void disconnect();
-    bool isConnected() const { return _connected; }
+    bool isConnected() const;
     EthernetInterface* get_interface() { return &_interface; }
     const EthernetInterface* get_interface() const { return &_interface; }
     const char* get_ip_address() const { return _ip_address; }
@@ -27,7 +27,8 @@ public:
 private:
     EthernetInterface _interface;
     ConfigManager* _config_manager;
-    bool _connected;
+    mutable bool _connected;
+    mutable uint32_t _last_sync_time;
     bool _running;
     char _ip_address[16];
     char _netmask[16];
