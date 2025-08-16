@@ -587,6 +587,14 @@ int main()
     if (config_manager->isSSRLinkEnabled()) {
         log_printf(LOG_LEVEL_INFO, "- Status: Enabled");
         log_printf(LOG_LEVEL_INFO, "- Transition Time: %d ms", config_manager->getSSRLinkTransitionTime());
+        
+        // 各LEDの設定値を出力
+        for (int i = 1; i <= 4; i++) {
+            RGBColorData color0 = config_manager->getSSRLinkColor0(i);
+            RGBColorData color100 = config_manager->getSSRLinkColor100(i);
+            log_printf(LOG_LEVEL_INFO, "- RGB LED %d 0%% color: R:%d G:%d B:%d", i, color0.r, color0.g, color0.b);
+            log_printf(LOG_LEVEL_INFO, "- RGB LED %d 100%% color: R:%d G:%d B:%d", i, color100.r, color100.g, color100.b);
+        }
     } else {
         log_printf(LOG_LEVEL_INFO, "- Status: Disabled");
     }

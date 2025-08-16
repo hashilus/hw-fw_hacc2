@@ -36,6 +36,21 @@ RGBLEDDriver::RGBLEDDriver(SSRDriver& ssr_driver, ConfigManager* config_manager,
     _rgb_pins[3][1] = new PwmOut(rgb4_g_pin);
     _rgb_pins[3][2] = new PwmOut(rgb4_b_pin);
     
+    // LED4用のデジタル出力ピンを初期化（2値制御用）
+    _led4_digital_pins[0] = new DigitalOut(rgb4_r_pin);
+    _led4_digital_pins[1] = new DigitalOut(rgb4_g_pin);
+    _led4_digital_pins[2] = new DigitalOut(rgb4_b_pin);
+    
+    // LED4のPWM出力を無効化（デジタル出力に切り替え）
+    _rgb_pins[3][0]->write(0.0f);
+    _rgb_pins[3][1]->write(0.0f);
+    _rgb_pins[3][2]->write(0.0f);
+    
+    // LED4のデジタル出力を初期化（OFF状態）
+    _led4_digital_pins[0]->write(0);
+    _led4_digital_pins[1]->write(0);
+    _led4_digital_pins[2]->write(0);
+    
     log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Setting initial PWM period");
     ThisThread::sleep_for(5ms);  // 出力完了を待つ
     // Initial settings
@@ -95,11 +110,16 @@ RGBLEDDriver::~RGBLEDDriver() {
         _transition_thread.join();
     }
 
-    // Free memory
+    // Free memory for PWM pins
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 3; j++) {
             delete _rgb_pins[i][j];
         }
+    }
+    
+    // Free memory for LED4 digital pins
+    for (int j = 0; j < 3; j++) {
+        delete _led4_digital_pins[j];
     }
 }
 
@@ -117,10 +137,17 @@ bool RGBLEDDriver::setColor(uint8_t id, uint8_t r, uint8_t g, uint8_t b) {
     _colors[index][1] = g;
     _colors[index][2] = b;
     
-    // Set PWM output (convert 0-255 to 0.0-1.0)
-    _rgb_pins[index][0]->write(r / 255.0f);
-    _rgb_pins[index][1]->write(g / 255.0f);
-    _rgb_pins[index][2]->write(b / 255.0f);
+    // LED4の場合は2値制御（0=OFF、1以上=ON）
+    if (id == 4) {
+        _led4_digital_pins[0]->write(r > 0 ? 1 : 0);
+        _led4_digital_pins[1]->write(g > 0 ? 1 : 0);
+        _led4_digital_pins[2]->write(b > 0 ? 1 : 0);
+    } else {
+        // LED1-3は通常のPWM制御
+        _rgb_pins[index][0]->write(r / 255.0f);
+        _rgb_pins[index][1]->write(g / 255.0f);
+        _rgb_pins[index][2]->write(b / 255.0f);
+    }
     
     return true;
 }
@@ -204,9 +231,6 @@ bool RGBLEDDriver::setColorWithTransition(uint8_t id, uint8_t target_r, uint8_t 
 }
 
 void RGBLEDDriver::updateSSRLinkColors() {
-    static uint32_t last_status_time = 0;  // 前回のステータス表示時刻
-    uint32_t current_time = us_ticker_read() / 1000;  // 現在時刻（ミリ秒）
-
     if (!_config_manager || !_config_manager->isSSRLinkEnabled()) {
         return;
     }
@@ -217,7 +241,6 @@ void RGBLEDDriver::updateSSRLinkColors() {
     
     // デューティ比が変更された場合のみ更新
     if (duty != last_duty) {
-        log_printf(LOG_LEVEL_DEBUG, "[DEBUG] SSR1 duty level changed: %d%% -> %d%%", last_duty, duty);
         ThisThread::sleep_for(5ms);  // 出力完了を待つ
         last_duty = duty;
         
@@ -227,17 +250,10 @@ void RGBLEDDriver::updateSSRLinkColors() {
             RGBColorData color0 = _config_manager->getSSRLinkColor0(i);
             RGBColorData color100 = _config_manager->getSSRLinkColor100(i);
             
-            log_printf(LOG_LEVEL_DEBUG, "[DEBUG] LED%d: Color0=(%d,%d,%d), Color100=(%d,%d,%d)", 
-                   i, color0.r, color0.g, color0.b, color100.r, color100.g, color100.b);
-            ThisThread::sleep_for(5ms);  // 出力完了を待つ
-            
             // デューティ比に応じて色を補間
             uint8_t r = color0.r + (color100.r - color0.r) * duty / 100;
             uint8_t g = color0.g + (color100.g - color0.g) * duty / 100;
             uint8_t b = color0.b + (color100.b - color0.b) * duty / 100;
-            
-            log_printf(LOG_LEVEL_DEBUG, "[DEBUG] LED%d: Calculated color=(%d,%d,%d)", i, r, g, b);
-            ThisThread::sleep_for(5ms);  // 出力完了を待つ
             
             // トランジション付きで色を設定
             setColorWithTransition(i, r, g, b, _config_manager->getSSRLinkTransitionTime());

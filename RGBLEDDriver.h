@@ -106,6 +106,9 @@ private:
     // RGB LED control PWM pins
     PwmOut* _rgb_pins[4][3]; // [LED number][color (R,G,B)]
     
+    // LED4用のデジタル出力ピン（2値制御用）
+    DigitalOut* _led4_digital_pins[3]; // [color (R,G,B)]
+    
     // Current color state
     uint8_t _colors[4][3]; // [LED number][color (R,G,B)]
     
