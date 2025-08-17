@@ -59,7 +59,11 @@ bool ConfigManager::loadConfig(bool create_if_not_exist) {
     log_printf(LOG_LEVEL_DEBUG, "SSR-LED Link: %s", _data.ssr_link_enabled ? "Enabled" : "Disabled");
     log_printf(LOG_LEVEL_DEBUG, "Transition Time: %d ms", _data.ssr_link_transition_ms);
     for (int i = 0; i < 4; i++) {
-        log_printf(LOG_LEVEL_DEBUG, "SSR%d PWM Frequency: %d Hz", i + 1, _data.ssr_pwm_frequency[i]);
+        if (_data.ssr_pwm_frequency[i] == -1) {
+            log_printf(LOG_LEVEL_DEBUG, "SSR%d PWM Frequency: -1 (設定変更無効)", i + 1);
+        } else {
+            log_printf(LOG_LEVEL_DEBUG, "SSR%d PWM Frequency: %d Hz", i + 1, _data.ssr_pwm_frequency[i]);
+        }
     }
     
     for (int i = 0; i < 4; i++) {
@@ -132,9 +136,17 @@ bool ConfigManager::loadConfig(bool create_if_not_exist) {
 
     // SSR周波数のバリデーション
     for (int i = 0; i < 4; i++) {
-        log_printf(LOG_LEVEL_DEBUG, "Checking SSR%d PWM frequency: %d Hz", i + 1, _data.ssr_pwm_frequency[i]);
-        if (_data.ssr_pwm_frequency[i] > 10) {
-            log_printf(LOG_LEVEL_WARN, "Invalid SSR%d PWM frequency: %d Hz", i + 1, _data.ssr_pwm_frequency[i]);
+        if (_data.ssr_pwm_frequency[i] == -1) {
+            log_printf(LOG_LEVEL_DEBUG, "Checking SSR%d PWM frequency: -1 (設定変更無効)", i + 1);
+        } else {
+            log_printf(LOG_LEVEL_DEBUG, "Checking SSR%d PWM frequency: %d Hz", i + 1, _data.ssr_pwm_frequency[i]);
+        }
+        if (_data.ssr_pwm_frequency[i] < -1 || _data.ssr_pwm_frequency[i] > 10) {
+            if (_data.ssr_pwm_frequency[i] == -1) {
+                log_printf(LOG_LEVEL_WARN, "Invalid SSR%d PWM frequency: -1 (設定変更無効)", i + 1);
+            } else {
+                log_printf(LOG_LEVEL_WARN, "Invalid SSR%d PWM frequency: %d Hz", i + 1, _data.ssr_pwm_frequency[i]);
+            }
             createDefaultConfig();
             _used_default = true;
             if (create_if_not_exist) {

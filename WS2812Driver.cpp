@@ -17,35 +17,17 @@ WS2812Driver::WS2812Driver()
       _uart2(P5_3, NC, 2400000),  // System 2: P5_3
       _uart3(P2_14, NC, 2400000)  // System 3: P2_14
 {
-    log_printf(LOG_LEVEL_DEBUG, "WS2812Driver: Starting initialization");
-    ThisThread::sleep_for(10ms);  // 出力完了を待つ
-    
     // Initialize port inversion for UART TX
-    log_printf(LOG_LEVEL_DEBUG, "WS2812Driver: Initializing port inversion");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     initPortInversion();
-    log_printf(LOG_LEVEL_DEBUG, "WS2812Driver: Port inversion initialized");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     
     // Initialize color buffers
-    log_printf(LOG_LEVEL_DEBUG, "WS2812Driver: Initializing color buffers");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     memset(_colors, 0, sizeof(_colors));
     memset(_buffer1, 0, sizeof(_buffer1));
     memset(_buffer2, 0, sizeof(_buffer2));
     memset(_buffer3, 0, sizeof(_buffer3));
-    log_printf(LOG_LEVEL_DEBUG, "WS2812Driver: Color buffers initialized");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     
     // Turn off all LEDs initially
-    log_printf(LOG_LEVEL_DEBUG, "WS2812Driver: Turning off all LEDs");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     allOff();
-    log_printf(LOG_LEVEL_DEBUG, "WS2812Driver: All LEDs turned off");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
-    
-    log_printf(LOG_LEVEL_DEBUG, "WS2812Driver: Initialization completed");
-    ThisThread::sleep_for(10ms);  // 出力完了を待つ
 }
 
 WS2812Driver::~WS2812Driver() {
@@ -53,24 +35,9 @@ WS2812Driver::~WS2812Driver() {
 }
 
 void WS2812Driver::initPortInversion() {
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] WS2812: Setting port inversion for UART TX pins");
-    ThisThread::sleep_for(5ms);
-
     // P5_0, P5_3, P2_14のUART TX出力を反転
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] WS2812: PNOT5 |= (1 << 0) | (1 << 3)");
-    ThisThread::sleep_for(5ms);
     PNOT5 |= (1 << 0) | (1 << 3);
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] WS2812: PNOT5 set");
-    ThisThread::sleep_for(5ms);
-
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] WS2812: PNOT2 |= (1 << 14)");
-    ThisThread::sleep_for(5ms);
     PNOT2 |= (1 << 14);
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] WS2812: PNOT2 set");
-    ThisThread::sleep_for(5ms);
-
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] WS2812: Port inversion completed");
-    ThisThread::sleep_for(5ms);
 }
 
 void WS2812Driver::initDMA() {
@@ -158,24 +125,14 @@ bool WS2812Driver::update(uint8_t system) {
 }
 
 bool WS2812Driver::updateAll() {
-    log_printf(LOG_LEVEL_DEBUG, "WS2812: Starting updateAll operation");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
-    
     bool success = true;
     
     // Update all systems
     for (uint8_t system = 1; system <= WS2812_SYSTEMS; system++) {
-        log_printf(LOG_LEVEL_DEBUG, "WS2812: Updating system %d", system);
-        ThisThread::sleep_for(5ms);  // 出力完了を待つ
         if (!update(system)) {
             success = false;
         }
-        log_printf(LOG_LEVEL_DEBUG, "WS2812: System %d updated", system);
-        ThisThread::sleep_for(5ms);  // 出力完了を待つ
     }
-    
-    log_printf(LOG_LEVEL_DEBUG, "WS2812: updateAll operation completed");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     
     return success;
 }
@@ -185,33 +142,19 @@ bool WS2812Driver::turnOff(uint8_t system) {
 }
 
 bool WS2812Driver::allOff() {
-    log_printf(LOG_LEVEL_DEBUG, "WS2812: Starting allOff operation");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
-    
     bool success = true;
     
     // Turn off all systems
     for (uint8_t system = 1; system <= WS2812_SYSTEMS; system++) {
-        log_printf(LOG_LEVEL_DEBUG, "WS2812: Turning off system %d", system);
-        ThisThread::sleep_for(5ms);  // 出力完了を待つ
         if (!turnOff(system)) {
             success = false;
         }
-        log_printf(LOG_LEVEL_DEBUG, "WS2812: System %d turned off", system);
-        ThisThread::sleep_for(5ms);  // 出力完了を待つ
     }
     
     // Update all systems
     if (success) {
-        log_printf(LOG_LEVEL_DEBUG, "WS2812: Updating all systems");
-        ThisThread::sleep_for(5ms);  // 出力完了を待つ
         success = updateAll();
-        log_printf(LOG_LEVEL_DEBUG, "WS2812: All systems updated");
-        ThisThread::sleep_for(5ms);  // 出力完了を待つ
     }
-    
-    log_printf(LOG_LEVEL_DEBUG, "WS2812: allOff operation completed");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     
     return success;
 }

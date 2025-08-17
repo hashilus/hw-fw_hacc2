@@ -389,7 +389,7 @@ void UDPController::processCommand(const char* command, int length) {
             "config rgb100 status <led_id> - Get LED 100%% color\n"
             "config trans <ms> - Set transition time\n"
             "config trans status - Get transition time\n"
-            "config ssr_freq <freq> - Set SSR PWM frequency (0-10 Hz)\n"
+            "config ssr_freq <freq> - Set SSR PWM frequency (-1-10 Hz, -1=設定変更無効)\n"
             "config ssr_freq status - Get SSR PWM frequency\n"
             "config ssr_freq status <id> - Get SSR PWM frequency for specific ID\n"
             "config load - Load configuration\n"
@@ -565,7 +565,11 @@ void UDPController::processCommand(const char* command, int length) {
             if (sscanf(args + 7, "%d", &ssr_id) == 1) {
                 if (ssr_id >= 1 && ssr_id <= 4) {
                     int freq = _ssr_driver.getPWMFrequency(ssr_id);
-                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR%d PWM frequency is %d Hz", ssr_id, freq);
+                    if (freq == -1) {
+                        snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR%d PWM frequency is -1 (設定変更無効)", ssr_id);
+                    } else {
+                        snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR%d PWM frequency is %d Hz", ssr_id, freq);
+                    }
                     sendResponse(_send_buffer);
                 } else {
                     snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid SSR ID (1-4)");
@@ -581,18 +585,26 @@ void UDPController::processCommand(const char* command, int length) {
             sendResponse(_send_buffer);
             for (int i = 1; i <= 4; i++) {
                 int freq = _config_manager->getSSRPWMFrequency(i);
-                snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR%d: %d Hz", i, freq);
+                if (freq == -1) {
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR%d: -1 (設定変更無効)", i);
+                } else {
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "SSR%d: %d Hz", i, freq);
+                }
                 sendResponse(_send_buffer);
             }
         } else {
             // 周波数を設定するコマンド（既存）
             int freq = atoi(args);
-            if (freq >= 0 && freq <= 10) {
+            if (freq >= -1 && freq <= 10) {
                 _config_manager->setSSRPWMFrequency(freq);
-                snprintf(_send_buffer, MAX_BUFFER_SIZE, "All SSR PWM frequencies set to %d Hz", freq);
+                if (freq == -1) {
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "All SSR PWM frequencies set to -1 (設定変更無効)");
+                } else {
+                    snprintf(_send_buffer, MAX_BUFFER_SIZE, "All SSR PWM frequencies set to %d Hz", freq);
+                }
                 sendResponse(_send_buffer);
             } else {
-                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid frequency (0-10 Hz)");
+                snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid frequency (-1-10 Hz)");
                 sendResponse(_send_buffer);
             }
         }
@@ -605,7 +617,7 @@ void UDPController::processCommand(const char* command, int length) {
     else if (strcmp(cmd, "config save") == 0) {
         // 現在のSSR周波数設定をConfigDataに反映（自動保存は無効）
         for (int i = 1; i <= 4; i++) {
-            uint8_t current_freq = _ssr_driver.getPWMFrequency(i);
+            int8_t current_freq = _ssr_driver.getPWMFrequency(i);
             _config_manager->setSSRPWMFrequency(i, current_freq, false);
         }
         
@@ -722,7 +734,7 @@ void UDPController::processFreqCommand(const char* args) {
     }
     
     // Check parameters
-    if (id < 0 || id > 4 || freq < 0 || freq > 10) {
+    if (id < 0 || id > 4 || freq < -1 || freq > 10) {
         generateErrorResponse(args);
         return;
     }

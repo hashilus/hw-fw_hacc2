@@ -13,7 +13,7 @@ struct ConfigData {
     bool dhcp_enabled;              // DHCP有効/無効
     uint8_t debug_level;            // デバッグレベル
     bool ssr_link_enabled;          // SSR-LED連動有効/無効
-    uint8_t ssr_pwm_frequency[4];   // SSR制御周波数（Hz）、各チャンネル毎
+    int8_t ssr_pwm_frequency[4];    // SSR制御周波数（Hz）、各チャンネル毎（-1〜10、-1は設定変更無効）
 
     // 2バイトのメンバーをまとめる
     uint16_t udp_port;              // UDPポート番号

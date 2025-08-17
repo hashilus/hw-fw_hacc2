@@ -8,30 +8,19 @@ RGBLEDDriver::RGBLEDDriver(SSRDriver& ssr_driver, ConfigManager* config_manager,
                           PinName rgb4_r_pin, PinName rgb4_g_pin, PinName rgb4_b_pin)
     : _thread_running(false), _ssr_driver(ssr_driver), _config_manager(config_manager) {
     
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Starting initialization");
-    ThisThread::sleep_for(10ms);  // 出力完了を待つ
-    
     // Initialize RGB LED pins
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Creating PWM pins for LED1");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     _rgb_pins[0][0] = new PwmOut(rgb1_r_pin);
     _rgb_pins[0][1] = new PwmOut(rgb1_g_pin);
     _rgb_pins[0][2] = new PwmOut(rgb1_b_pin);
     
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Creating PWM pins for LED2");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     _rgb_pins[1][0] = new PwmOut(rgb2_r_pin);
     _rgb_pins[1][1] = new PwmOut(rgb2_g_pin);
     _rgb_pins[1][2] = new PwmOut(rgb2_b_pin);
     
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Creating PWM pins for LED3");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     _rgb_pins[2][0] = new PwmOut(rgb3_r_pin);
     _rgb_pins[2][1] = new PwmOut(rgb3_g_pin);
     _rgb_pins[2][2] = new PwmOut(rgb3_b_pin);
     
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Creating PWM pins for LED4");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     _rgb_pins[3][0] = new PwmOut(rgb4_r_pin);
     _rgb_pins[3][1] = new PwmOut(rgb4_g_pin);
     _rgb_pins[3][2] = new PwmOut(rgb4_b_pin);
@@ -51,35 +40,18 @@ RGBLEDDriver::RGBLEDDriver(SSRDriver& ssr_driver, ConfigManager* config_manager,
     _led4_digital_pins[1]->write(0);
     _led4_digital_pins[2]->write(0);
     
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Setting initial PWM period");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     // Initial settings
     _period_us = DEFAULT_PERIOD_US;
     
     // Initialize: turn off all LEDs and set PWM period
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Configuring PWM pins");
-    ThisThread::sleep_for(10ms);  // 出力完了を待つ
-    
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 3; j++) {
-            log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Setting PWM period for LED%d, color%d", i+1, j+1);
-            ThisThread::sleep_for(5ms);  // 出力完了を待つ
             _rgb_pins[i][j]->period_us(_period_us);
-            log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: PWM period set for LED%d, color%d", i+1, j+1);
-            ThisThread::sleep_for(5ms);  // 出力完了を待つ
-            
-            log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Setting PWM duty to 0 for LED%d, color%d", i+1, j+1);
-            ThisThread::sleep_for(5ms);  // 出力完了を待つ
             _rgb_pins[i][j]->write(0.0f);
-            log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: PWM duty set for LED%d, color%d", i+1, j+1);
-            ThisThread::sleep_for(5ms);  // 出力完了を待つ
-            
             _colors[i][j] = 0;
         }
     }
 
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Initializing transition states");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     // トランジション状態の初期化
     for (int i = 0; i < 4; i++) {
         _transitions[i].active = false;
@@ -93,14 +65,9 @@ RGBLEDDriver::RGBLEDDriver(SSRDriver& ssr_driver, ConfigManager* config_manager,
         _transitions[i].duration_ms = 0;
     }
 
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Starting transition thread");
-    ThisThread::sleep_for(5ms);  // 出力完了を待つ
     // トランジション更新スレッドを開始
     _thread_running = true;
     _transition_thread.start(callback(this, &RGBLEDDriver::transitionThreadFunc));
-    
-    log_printf(LOG_LEVEL_DEBUG, "[DEBUG] RGBLEDDriver: Initialization completed");
-    ThisThread::sleep_for(10ms);  // 出力完了を待つ
 }
 
 RGBLEDDriver::~RGBLEDDriver() {

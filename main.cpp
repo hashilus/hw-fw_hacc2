@@ -474,6 +474,18 @@ void kick_watchdog() {
 
 int main()
 {
+    // 起動時の安定化待機（シリアルポート接続の確立を待つ）
+    ThisThread::sleep_for(2000ms);  // 2秒待機に延長
+    
+    // 起動メッセージ
+    log_printf(LOG_LEVEL_INFO, "=== HACC2 System Starting ===");
+    log_printf(LOG_LEVEL_INFO, "Build: %s %s", __DATE__, __TIME__);
+    log_printf(LOG_LEVEL_INFO, "Target: %s", MBED_STRINGIFY(TARGET_NAME));
+    log_printf(LOG_LEVEL_INFO, "==========================================");
+    
+    // シリアル通信の準備完了確認
+    log_printf(LOG_LEVEL_INFO, "Serial communication ready - starting system initialization");
+    
     print_reset_reason();
     
     // ウォッチドッグタイマー初期化（リセット要因確認後）
@@ -482,6 +494,12 @@ int main()
     // シリアル通信の初期化
     pc.set_baud(115200);
     pc.set_format(8, BufferedSerial::None, 1);
+    
+    // シリアル通信の安定化待機
+    ThisThread::sleep_for(1000ms);  // 1秒待機に延長
+    
+    // シリアル通信初期化完了確認
+    log_printf(LOG_LEVEL_INFO, "Serial communication initialized (115200 bps, 8N1)");
     
     // システムステータスLEDの初期化
     led_r = 0;
@@ -506,10 +524,16 @@ int main()
     rgb_led = std::make_unique<RGBLEDDriver>(ssr, config_manager.get());
     kick_watchdog();  // RGBLEDDriver初期化後にkick
     
+    // 初期化処理の完了を待機
+    ThisThread::sleep_for(100ms);
+    
     // Initialize WS2812 driver
     log_printf(LOG_LEVEL_INFO, "Initializing WS2812 driver...");
     ws2812_driver = std::make_unique<WS2812Driver>();
     kick_watchdog();  // 初期化中にkick
+    
+    // 初期化処理の完了を待機
+    ThisThread::sleep_for(100ms);
     
     // Load configuration from EEPROM first (ConfigManagerのコンストラクタで既に読み込み済み)
     log_printf(LOG_LEVEL_INFO, "Configuration loaded from EEPROM");
@@ -520,11 +544,19 @@ int main()
     kick_watchdog();  // SSR周波数適用開始前にkick
     
     for (int i = 1; i <= 4; i++) {
-        uint8_t saved_freq = config_manager->getSSRPWMFrequency(i);
+        int8_t saved_freq = config_manager->getSSRPWMFrequency(i);
         if (ssr.setPWMFrequency(i, saved_freq)) {
-            log_printf(LOG_LEVEL_INFO, "- SSR%d PWM Frequency: %d Hz (applied)", i, saved_freq);
+            if (saved_freq == -1) {
+                log_printf(LOG_LEVEL_INFO, "- SSR%d PWM Frequency: -1 (設定変更無効) (applied)", i);
+            } else {
+                log_printf(LOG_LEVEL_INFO, "- SSR%d PWM Frequency: %d Hz (applied)", i, saved_freq);
+            }
         } else {
-            log_printf(LOG_LEVEL_WARN, "- SSR%d PWM Frequency: %d Hz (failed to apply, using default)", i, saved_freq);
+            if (saved_freq == -1) {
+                log_printf(LOG_LEVEL_WARN, "- SSR%d PWM Frequency: -1 (設定変更無効) (failed to apply, using default)", i);
+            } else {
+                log_printf(LOG_LEVEL_WARN, "- SSR%d PWM Frequency: %d Hz (failed to apply, using default)", i, saved_freq);
+            }
         }
     }
     log_printf(LOG_LEVEL_INFO, "------------------------------------------");
@@ -613,7 +645,7 @@ int main()
     kick_watchdog();  // コマンド表示開始前にkick
     
     log_printf(LOG_LEVEL_INFO, "  set/ssr <num>,<value>  Set SSR output (0-100%%, ON/OFF)");
-    log_printf(LOG_LEVEL_INFO, "  freq <num>,<hz>        Set PWM frequency (1-10Hz)");
+    log_printf(LOG_LEVEL_INFO, "  freq <num>,<hz>        Set PWM frequency (-1-10Hz, -1=設定変更無効)");
     log_printf(LOG_LEVEL_INFO, "  get <num>              Get current settings");
     log_printf(LOG_LEVEL_INFO, "  rgb <num>,<r>,<g>,<b>  Set RGB LED color (0-255)");
     log_printf(LOG_LEVEL_INFO, "  rgbget <num>           Get RGB LED color");

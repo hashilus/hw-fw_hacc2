@@ -137,10 +137,25 @@ uint8_t SSRDriver::getDutyLevel(uint8_t id) {
     return _duty_level[id - 1];
 }
 
-bool SSRDriver::setPWMFrequency(uint8_t frequency_hz) {
-    if (frequency_hz > 10) {
+bool SSRDriver::setPWMFrequency(int8_t frequency_hz) {
+    if (frequency_hz < -1 || frequency_hz > 10) {
         return false;
     }
+    
+    // -1設定時の設定変更無効化ロジック
+    bool has_minus_one = false;
+    for (int i = 0; i < 4; i++) {
+        if (_pwm_frequency_hz_individual[i] == -1) {
+            has_minus_one = true;
+            break;
+        }
+    }
+    
+    if (has_minus_one && frequency_hz != 0) {
+        // -1が設定されているチャンネルがある場合は、0以外の設定変更を無効化
+        return false;
+    }
+    
     _pwm_frequency_hz = frequency_hz;
     for (int i = 1; i <= 4; i++) {
         setPWMFrequency(i, frequency_hz);
@@ -148,7 +163,7 @@ bool SSRDriver::setPWMFrequency(uint8_t frequency_hz) {
     return true;
 }
 
-uint8_t SSRDriver::getPWMFrequency() {
+int8_t SSRDriver::getPWMFrequency() {
     return _pwm_frequency_hz;
 }
 
@@ -166,22 +181,29 @@ bool SSRDriver::getSSRStatus(uint8_t id, uint8_t& duty_level, bool& state, uint3
     return true;
 }
 
-bool SSRDriver::setPWMFrequency(uint8_t id, uint8_t frequency_hz) {
+bool SSRDriver::setPWMFrequency(uint8_t id, int8_t frequency_hz) {
     // Check id
     if (id < 1 || id > 4) {
         return false;
     }
     
     // Check frequency range
-    if (frequency_hz > 10) {
+    if (frequency_hz < -1 || frequency_hz > 10) {
         return false;
     }
     
     uint8_t index = id - 1;
+    
+    // -1設定時の設定変更無効化ロジック
+    if (_pwm_frequency_hz_individual[index] == -1 && frequency_hz != 0) {
+        // -1が設定されている場合は、0以外の設定変更を無効化
+        return false;
+    }
+    
     _pwm_frequency_hz_individual[index] = frequency_hz;
     
     // Update time-based control parameters for this channel
-    if (frequency_hz == 0) {
+    if (frequency_hz == -1 || frequency_hz == 0) {
         _ssr_period[index] = 0;  // ゼロクロス同期制御
         _ssr_counter[index] = 0;  // カウンタをリセット
     } else {
@@ -203,7 +225,7 @@ bool SSRDriver::setPWMFrequency(uint8_t id, uint8_t frequency_hz) {
     return true;
 }
 
-uint8_t SSRDriver::getPWMFrequency(uint8_t id) {
+int8_t SSRDriver::getPWMFrequency(uint8_t id) {
     // Check id
     if (id < 1 || id > 4) {
         return 0;

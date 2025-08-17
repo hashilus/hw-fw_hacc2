@@ -73,24 +73,24 @@ public:
     
     /**
      * Set PWM frequency (common for all SSRs)
-     * @param frequency_hz Frequency (1-10Hz)
+     * @param frequency_hz Frequency (-1-10Hz, -1=設定変更無効)
      * @return true if successful, false otherwise
      */
-    bool setPWMFrequency(uint8_t frequency_hz);
+    bool setPWMFrequency(int8_t frequency_hz);
     
     /**
      * Set PWM frequency for specific SSR channel
      * @param id SSR number (1-4)
-     * @param frequency_hz Frequency (1-10Hz)
+     * @param frequency_hz Frequency (-1-10Hz, -1=設定変更無効)
      * @return true if successful, false otherwise
      */
-    bool setPWMFrequency(uint8_t id, uint8_t frequency_hz);
+    bool setPWMFrequency(uint8_t id, int8_t frequency_hz);
     
     /**
      * Get the current PWM frequency
      * @return Current PWM frequency (Hz)
      */
-    uint8_t getPWMFrequency();
+    int8_t getPWMFrequency();
     
     /**
      * Get detailed status of SSR for debugging
@@ -107,7 +107,7 @@ public:
      * @param id SSR number (1-4)
      * @return Current PWM frequency (Hz)
      */
-    uint8_t getPWMFrequency(uint8_t id);
+    int8_t getPWMFrequency(uint8_t id);
     
     /**
      * Get zero-cross detection status
@@ -204,10 +204,10 @@ private:
     uint8_t _duty_level[4]; // Current duty cycle level (0-100)
     
     // PWM frequency (Hz) - common for all SSRs
-    uint8_t _pwm_frequency_hz;
+    int8_t _pwm_frequency_hz;
     
     // PWM frequency (Hz) - individual for each SSR
-    uint8_t _pwm_frequency_hz_individual[4];
+    int8_t _pwm_frequency_hz_individual[4];
     
     // 時間周期制御用カウンタ（ゼロクロス割り込み内で加算）
     uint32_t _time_on_count[4] = {0}; // 各チャンネルのON時間（ゼロクロス回数）

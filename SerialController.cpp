@@ -207,7 +207,7 @@ void SerialController::displayHelp() {
     log_printf(LOG_LEVEL_INFO, "=== Available Commands ===");
     log_printf(LOG_LEVEL_INFO, "SSR Control:");
     log_printf(LOG_LEVEL_INFO, "  set <num>,<value>    Set SSR output (0-100%%)");
-    log_printf(LOG_LEVEL_INFO, "  freq <num>,<hz>      Set PWM frequency (1-10Hz)");
+    log_printf(LOG_LEVEL_INFO, "  freq <num>,<hz>      Set PWM frequency (-1-10Hz, -1=設定変更無効)");
     log_printf(LOG_LEVEL_INFO, "  get <num>            Get current settings");
     
     log_printf(LOG_LEVEL_INFO, "RGB LED Control:");
@@ -227,7 +227,7 @@ void SerialController::displayHelp() {
     log_printf(LOG_LEVEL_INFO, "  config rgb0 <n>,<r>,<g>,<b>  Set SSR 0%% color");
     log_printf(LOG_LEVEL_INFO, "  config rgb100 <n>,<r>,<g>,<b>  Set LED 100%% color (n: 1-4)");
     log_printf(LOG_LEVEL_INFO, "  config trans <ms>  Set transition time (100-10000ms)");
-    log_printf(LOG_LEVEL_INFO, "  config ssr_freq <freq>  Set SSR PWM frequency (0-10 Hz)");
+            log_printf(LOG_LEVEL_INFO, "  config ssr_freq <freq>  Set SSR PWM frequency (-1-10 Hz, -1=設定変更無効)");
 
     log_printf(LOG_LEVEL_INFO, "Debug:");
     log_printf(LOG_LEVEL_INFO, "  debug level <0-3>    Set debug level");
@@ -268,9 +268,13 @@ void SerialController::handleSetCommand(const char* command) {
 void SerialController::handleFreqCommand(const char* command) {
     int num, freq;
     if (sscanf(command, "%d,%d", &num, &freq) == 2) {
-        if (num >= 1 && num <= 4 && freq >= 1 && freq <= 10) {
+        if (num >= 1 && num <= 4 && freq >= -1 && freq <= 10) {
             _ssr_driver->setPWMFrequency(freq);
-            log_printf(LOG_LEVEL_INFO, "SSR%d frequency set to %d Hz", num, freq);
+            if (freq == -1) {
+                log_printf(LOG_LEVEL_INFO, "SSR%d frequency set to -1 (設定変更無効)", num);
+            } else {
+                log_printf(LOG_LEVEL_INFO, "SSR%d frequency set to %d Hz", num, freq);
+            }
         } else {
             log_printf(LOG_LEVEL_ERROR, "Invalid parameters");
         }
@@ -283,10 +287,17 @@ void SerialController::handleGetCommand(const char* command) {
     int num;
     if (sscanf(command, "%d", &num) == 1) {
         if (num >= 1 && num <= 4) {
-            log_printf(LOG_LEVEL_INFO, "SSR%d: %d%% (%d Hz)", 
-                      num, 
-                      _ssr_driver->getDutyLevel(num),
-                      _ssr_driver->getPWMFrequency());
+            int8_t freq = _ssr_driver->getPWMFrequency();
+            if (freq == -1) {
+                log_printf(LOG_LEVEL_INFO, "SSR%d: %d%% (-1 Hz, 設定変更無効)", 
+                          num, 
+                          _ssr_driver->getDutyLevel(num));
+            } else {
+                log_printf(LOG_LEVEL_INFO, "SSR%d: %d%% (%d Hz)", 
+                          num, 
+                          _ssr_driver->getDutyLevel(num),
+                          freq);
+            }
         } else {
             log_printf(LOG_LEVEL_ERROR, "Invalid SSR number");
         }
@@ -389,8 +400,12 @@ void SerialController::handleConfigCommand(const char* command) {
         // SSR周波数設定
         log_printf(LOG_LEVEL_INFO, "SSR PWM Frequencies:");
         for (int i = 1; i <= 4; i++) {
-            uint8_t freq = _ssr_driver->getPWMFrequency(i);
-            log_printf(LOG_LEVEL_INFO, "- SSR%d: %d Hz", i, freq);
+            int8_t freq = _ssr_driver->getPWMFrequency(i);
+            if (freq == -1) {
+                log_printf(LOG_LEVEL_INFO, "- SSR%d: -1 (設定変更無効)", i);
+            } else {
+                log_printf(LOG_LEVEL_INFO, "- SSR%d: %d Hz", i, freq);
+            }
         }
         log_printf(LOG_LEVEL_INFO, "------------------------------------------");
         
@@ -419,7 +434,7 @@ void SerialController::handleConfigCommand(const char* command) {
     else if (strcmp(command, "save") == 0) {
         // 現在のSSR周波数設定をConfigDataに反映（自動保存は無効）
         for (int i = 1; i <= 4; i++) {
-            uint8_t current_freq = _ssr_driver->getPWMFrequency(i);
+            int8_t current_freq = _ssr_driver->getPWMFrequency(i);
             _config_manager->setSSRPWMFrequency(i, current_freq, false);
         }
         
@@ -533,11 +548,15 @@ void SerialController::handleConfigCommand(const char* command) {
     else if (strncmp(command, "ssr_freq ", 9) == 0) {
         int freq;
         if (sscanf(command + 9, "%d", &freq) == 1) {
-            if (freq >= 0 && freq <= 10) {
+            if (freq >= -1 && freq <= 10) {
                 _config_manager->setSSRPWMFrequency(freq);
-                log_printf(LOG_LEVEL_INFO, "All SSR PWM frequencies set to %d Hz", freq);
+                if (freq == -1) {
+                    log_printf(LOG_LEVEL_INFO, "All SSR PWM frequencies set to -1 (設定変更無効)");
+                } else {
+                    log_printf(LOG_LEVEL_INFO, "All SSR PWM frequencies set to %d Hz", freq);
+                }
             } else {
-                log_printf(LOG_LEVEL_ERROR, "Invalid frequency. Must be 0-10 Hz");
+                log_printf(LOG_LEVEL_ERROR, "Invalid frequency. Must be -1-10 Hz");
             }
         } else {
             log_printf(LOG_LEVEL_ERROR, "Invalid format. Use: ssr_freq <freq>");

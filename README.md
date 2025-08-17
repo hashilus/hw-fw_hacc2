@@ -4,8 +4,10 @@
 HACC2は、Hashilusの空気制御システムのコントローラーです。Mbed OSを使用して実装されており、UDP経由でコマンドを受け付け、SSRとRGB LEDを制御します。
 
 ## バージョン
-- 現在のバージョン: 2.1.0
+- 現在のバージョン: 2.2.0
 - 主な変更点:
+  - SSR制御周期の設定範囲を-1〜10に拡張（-1=設定変更無効）
+  - 設定変更無効化機能の追加（-1設定時の設定変更保護）
   - ゼロクロス検出機能の追加（P3_9ピン、両エッジ検出）
   - トライアック制御機能の実装（1サイクル内でのON時間可変制御）
   - 商用電源周波数の自動検出（50Hz/60Hz対応）
@@ -53,7 +55,7 @@ UDPコマンドは、デバイスのIPアドレスとポート（デフォルト
 
 - `set <channel> <duty>` - SSRのデューティ比を設定（0-100%）
 - `get <channel>` - SSRのデューティ比を取得
-- `freq <channel> <freq>` - SSRの周波数を設定（0-10Hz）
+- `freq <channel> <freq>` - SSRの周波数を設定（-1-10Hz、-1=設定変更無効）
 
 #### RGB LED制御
 
@@ -109,9 +111,11 @@ UDPコマンドは、デバイスのIPアドレスとポート（デフォルト
 #### PWM周波数設定
 - コマンド: `freq <id>,<value>`
   - id: 0-4 (0は全チャンネル)
-  - value: 0-10 (Hz)
+  - value: -1-10 (Hz、-1=設定変更無効)
   - 応答: `freq <id>,<value>,OK`
-- 例: `freq 0,5` → `freq 0,5,OK` (全チャンネルを5Hzに設定)
+- 例: 
+  - `freq 0,5` → `freq 0,5,OK` (全チャンネルを5Hzに設定)
+  - `freq 1,-1` → `freq 1,-1,OK` (チャンネル1を設定変更無効に設定)
 
 #### 状態取得
 - コマンド: `get <id>`
@@ -174,6 +178,34 @@ UDPコマンドは、デバイスのIPアドレスとポート（デフォルト
   - ms: 100-10000 (ミリ秒)
   - 応答: `Transition time set to <ms> ms`
 - 例: `config trans 1000` → `Transition time set to 1000 ms`
+
+#### SSR制御周期設定
+- コマンド: `config ssr_freq <freq>`
+  - freq: -1-10 (Hz、-1=設定変更無効)
+  - 応答: `All SSR PWM frequencies set to <freq> Hz` または `All SSR PWM frequencies set to -1 (設定変更無効)`
+- 例: 
+  - `config ssr_freq 5` → `All SSR PWM frequencies set to 5 Hz`
+  - `config ssr_freq -1` → `All SSR PWM frequencies set to -1 (設定変更無効)`
+
+#### SSR制御周期状態確認
+- コマンド: `config ssr_freq status`
+  - 応答: 各チャンネルの設定値を表示
+- 例: `config ssr_freq status` → 
+  ```
+  SSR PWM frequencies:
+  SSR1: 5 Hz
+  SSR2: -1 (設定変更無効)
+  SSR3: 3 Hz
+  SSR4: 1 Hz
+  ```
+
+#### 個別SSR制御周期確認
+- コマンド: `config ssr_freq status <id>`
+  - id: 1-4
+  - 応答: `SSR<id> PWM frequency is <freq> Hz` または `SSR<id> PWM frequency is -1 (設定変更無効)`
+- 例: 
+  - `config ssr_freq status 1` → `SSR1 PWM frequency is 5 Hz`
+  - `config ssr_freq status 2` → `SSR2 PWM frequency is -1 (設定変更無効)`
 
 ### 特殊コマンド
 #### ミスト制御
@@ -238,6 +270,12 @@ UDPコマンドは、デバイスのIPアドレスとポート（デフォルト
 4. **トライアック制御**: 計算されたタイミングでSSRをON/OFF制御
 
 ### 制御モード
+#### 設定変更無効モード（freq = -1）
+- **制御方式**: ゼロクロス同期制御（0と同じ動作）
+- **設定変更**: 0以外の設定変更を無効化
+- **解除方法**: 0を設定することで設定変更を可能にする
+- **適用場面**: 設定の誤変更を防ぎたい場合
+
 #### ゼロクロス制御（freq = 0）
 - **制御方式**: ゼロクロス同期制御
 - **デューティ比変換**: 0-100%を20-85%に変換
@@ -307,11 +345,13 @@ set 1,50
 - `enablePWM`メソッド: 非推奨機能として削除（何もしないメソッドだったため）
 
 ### 追加された機能
+- **SSR制御周期拡張**: 設定範囲を-1〜10に拡張（-1=設定変更無効）
+- **設定変更無効化機能**: -1設定時の設定変更保護機能
 - **ゼロクロス検出機能**: P3_9ピンでの立ち上がりエッジ検出（半波整流対応）
 - **トライアック制御**: ゼロクロス同期での高精度制御
 - **電源周波数自動検出**: 50Hz/60Hz地域の自動判定（過去100回の平均）
 - **ゼロクロス状態確認コマンド**: `zerox`コマンド
-- **制御モード**: ゼロクロス制御（freq=0）と非ゼロクロス制御（freq=1-10Hz）
+- **制御モード**: 設定変更無効制御（freq=-1）、ゼロクロス制御（freq=0）、非ゼロクロス制御（freq=1-10Hz）
 - **デューティ比変換**: ゼロクロス制御時は0-100%を20-85%に変換
 - **ノイズ対策**: 15msec間の割り込み禁止による安定化
 - 設定色読み取りコマンド: `config rgb0 status`, `config rgb100 status`
@@ -361,8 +401,10 @@ set 1,50
   - 例: `set 1 50` (チャンネル1を50%で制御)
 - `freq <id> <value>`: PWM周波数を設定
   - id: 1-4
-  - value: 0-10 (Hz)
-  - 例: `freq 1 5` (チャンネル1を5Hzに設定)
+  - value: -1-10 (Hz、-1=設定変更無効)
+  - 例: 
+    - `freq 1 5` (チャンネル1を5Hzに設定)
+    - `freq 1 -1` (チャンネル1を設定変更無効に設定)
 - `get <id>`: SSRの状態を取得
   - id: 1-4
   - 例: `get 1` (チャンネル1の状態を表示)
@@ -381,6 +423,7 @@ set 1,50
 - `config save`: 設定を保存
 - `config load`: 設定を読み込み
 - `config ssrlink on/off`: SSR-LED連動の有効/無効
+- `config ssr_freq <freq>`: SSR制御周期を設定（-1-10Hz、-1=設定変更無効）
 - `netbios <name>`: NETBIOS名を設定
 - `ip <address>`: IPアドレスを設定
 - `mask <netmask>`: サブネットマスクを設定
