@@ -422,13 +422,15 @@ set 1,50
 - `config`: 現在の設定を表示
 - `config save`: 設定を保存
 - `config load`: 設定を読み込み
-- `config ssrlink on/off`: SSR-LED連動の有効/無効
+- `config netbios <name>`: NETBIOS名を設定
+- `config ip <address>`: IPアドレスを設定
+- `config mask <netmask>`: サブネットマスクを設定
+- `config gateway <address>`: デフォルトゲートウェイを設定
+- `config dhcp on/off`: DHCPの有効/無効
 - `config ssr_freq <freq>`: SSR制御周期を設定（-1-10Hz、-1=設定変更無効）
-- `netbios <name>`: NETBIOS名を設定
-- `ip <address>`: IPアドレスを設定
-- `mask <netmask>`: サブネットマスクを設定
-- `gateway <address>`: デフォルトゲートウェイを設定
-- `dhcp on/off`: DHCPの有効/無効
+
+#### 特殊コマンド
+- `sofia`: かわいいコマンド
 
 ### コマンド入力機能
 - コマンド履歴: 上下矢印キーで履歴を参照
