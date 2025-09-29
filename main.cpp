@@ -7,6 +7,7 @@
 #include "SSRDriver.h"
 #include "RGBLEDDriver.h"
 #include "WS2812Driver.h"
+#include "IdleAnimator.h"
 #include "UDPController.h"
 #include "ConfigManager.h"
 #include "PinNames.h"
@@ -69,6 +70,7 @@ static std::unique_ptr<UDPController> udp_controller;
 static SSRDriver ssr;
 static std::unique_ptr<RGBLEDDriver> rgb_led;
 static std::unique_ptr<WS2812Driver> ws2812_driver;
+static std::unique_ptr<IdleAnimator> idle_animator;
 static SerialController serial_controller(nullptr, &ssr, nullptr, pc);
 
 // SSRの出力に合わせてLEDを更新するタイマー
@@ -214,12 +216,14 @@ void led_status_thread() {
 void packet_received(const char* command) {
     update_status_led(STATUS_PACKET_RECEIVED);
     status_timeout.attach(reset_temp_status, 200ms);
+    if (idle_animator) idle_animator->notifyActivity();
 }
 
 // コマンド実行時に呼び出すコールバック
 void command_executed(const char* command) {
     update_status_led(STATUS_COMMAND_EXEC);
     status_timeout.attach(reset_temp_status, 500ms);
+    if (idle_animator) idle_animator->notifyActivity();
 }
 
 // ログレベル定義
@@ -523,6 +527,13 @@ int main()
     kick_watchdog();  // RGBLEDDriver初期化前にkick
     rgb_led = std::make_unique<RGBLEDDriver>(ssr, config_manager.get());
     kick_watchdog();  // RGBLEDDriver初期化後にkick
+
+    // IdleAnimator 初期化
+    idle_animator = std::make_unique<IdleAnimator>(rgb_led.get());
+    idle_animator->setIdleTimeout( std::chrono::milliseconds(10000) ); // 10秒無通信で開始
+    idle_animator->setIntervalRange( std::chrono::milliseconds(800), std::chrono::milliseconds(3000) );
+    idle_animator->setFadeDuration( std::chrono::milliseconds(600) );
+    idle_animator->start();
     
     // 初期化処理の完了を待機
     ThisThread::sleep_for(100ms);
