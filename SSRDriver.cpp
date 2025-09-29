@@ -293,7 +293,12 @@ void SSRDriver::zeroxEdgeHandler() {
     _zerox_flag = true;
     _zerox_count++;
     
-    // 前回の立ち上がりエッジ時刻を記録
+    // 直近周期（立ち上がりエッジ間隔）を計算
+    uint32_t last_interval_us = 0;
+    if (_last_rise_time_us != 0) {
+        last_interval_us = now - _last_rise_time_us;
+    }
+    // 前回の立ち上がりエッジ時刻を更新
     _last_rise_time_us = now;
     
     // 割り込みを15msec間禁止
@@ -304,15 +309,24 @@ void SSRDriver::zeroxEdgeHandler() {
     // 即座実行：zeroxControlHandlerを即座に実行
     zeroxControlHandler();
 
-    // 遅延実行：電源周波数の半分の時間後にzeroxControlHandlerを実行
-    float power_freq = getPowerLineFrequency();
-    if (power_freq < 1.0f) {
-        power_freq = 60.0f;  // デフォルト値
+    // 遅延実行：半周期時間後にzeroxControlHandlerを実行
+    // 可能ならば直近の測定周期から半周期を算出し、揺らぎを低減
+    uint32_t half_cycle_us;
+    if (last_interval_us >= 14000 && last_interval_us <= 22000) {
+        // 50Hz(20000us) / 60Hz(16667us) 想定レンジ内
+        half_cycle_us = last_interval_us / 2;  // 整数割りでOK（<1us誤差）
+    } else {
+        // フォールバック：平均周波数から算出（四捨五入）
+        float power_freq = getPowerLineFrequency();
+        if (power_freq < 1.0f) {
+            power_freq = 60.0f;  // デフォルト値
+        }
+        half_cycle_us = (uint32_t)(1000000.0f / (power_freq * 2.0f) + 0.5f);
     }
-    uint32_t half_cycle_us = (uint32_t)(1000000.0f / power_freq / 2.0f + 0.5f);  // 半周期時間
-    
-    _delayed_control_timeout.attach(callback(this, &SSRDriver::delayedControlHandler), 
-                                    std::chrono::microseconds(half_cycle_us));
+    _delayed_control_timeout.attach(
+        callback(this, &SSRDriver::delayedControlHandler),
+        std::chrono::microseconds(half_cycle_us)
+    );
 }
 
 // 割り込み再有効化ハンドラ（15msec後に呼び出し）
@@ -337,20 +351,20 @@ void SSRDriver::zeroxControlHandler() {
                 _ssr[i]->write(1);
                 _state[i] = true;
             } else {
-                // 商用電源周波数を自動検出してデューティ比を計算
-                float power_freq = getPowerLineFrequency();
-                if (power_freq < 1.0f) {
-                    power_freq = 60.0f;  // 60Hz地域のデフォルト
+                // 半周期時間（1サイクル内の制御ウィンドウ長）を直近周期から算出
+                uint32_t interval_us = getZeroCrossInterval();
+                uint32_t cycle_time_us;
+                if (interval_us >= 14000 && interval_us <= 25000) {
+                    // フルサイクル（50Hz=20000us, 60Hz~16667us）から半周期へ
+                    cycle_time_us = interval_us / 2;
+                } else {
+                    // フォールバック：平均周波数から計算
+                    float power_freq = getPowerLineFrequency();
+                    if (power_freq < 1.0f) {
+                        power_freq = 60.0f;
+                    }
+                    cycle_time_us = (uint32_t)(1000000.0f / (power_freq * 2.0f) + 0.5f);
                 }
-                // // 60Hz地域での手動補正（必要に応じて）
-                // if (power_freq < 55.0f) {
-                //     power_freq = 60.0f;  // 50Hzとして誤検出された場合の補正
-                // }
-                
-                // デューティ比に応じたONタイミングを計算
-                // ゼロクロス検出は両エッジなので、周期は電源周波数の倍
-                uint32_t zero_cross_freq = power_freq * 2;  // 50Hz → 100Hz, 60Hz → 120Hz
-                uint32_t cycle_time_us = 1000000 / zero_cross_freq;  // 例：100Hz = 10000μs
                 
                 // デューティ比に応じたONタイミング計算
                 // 0〜100%を20〜85%に変換
