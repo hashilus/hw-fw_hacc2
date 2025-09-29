@@ -388,7 +388,7 @@ void SSRDriver::zeroxControlHandler() {
                 uint32_t on_time_us = 1000;  // 1msec = 1000μs固定
                 
                 // デバッグ変数を更新（割り込み内で軽量処理）
-                _debug_power_freq = power_freq;
+                _debug_power_freq = getPowerLineFrequency();
                 _debug_on_time_us = on_time_us;
                 _debug_cycle_time_us = cycle_time_us;
                 
