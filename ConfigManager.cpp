@@ -222,6 +222,9 @@ void ConfigManager::createDefaultConfig() {
         _data.ssr_link_colors_100[i].b = 0;
     }
     
+    // ランダムRGBアイドル（10秒単位）。デフォルト: 3 (=30秒) に設定
+    _data.random_rgb_timeout_10s = 3;
+    
     // 設定を保存
     saveConfig();
 }
@@ -432,6 +435,7 @@ void ConfigManager::printSSRLinkConfig() const {
         log_printf(LOG_LEVEL_INFO, "LED%d 0%%: R=%d G=%d B=%d", i + 1, _data.ssr_link_colors_0[i].r, _data.ssr_link_colors_0[i].g, _data.ssr_link_colors_0[i].b);
         log_printf(LOG_LEVEL_INFO, "LED%d 100%%: R=%d G=%d B=%d", i + 1, _data.ssr_link_colors_100[i].r, _data.ssr_link_colors_100[i].g, _data.ssr_link_colors_100[i].b);
     }
+    log_printf(LOG_LEVEL_INFO, "Random RGB idle timeout: %u (x10s)", _data.random_rgb_timeout_10s);
 }
 
 const char* ConfigManager::getCurrentIPAddress() const {

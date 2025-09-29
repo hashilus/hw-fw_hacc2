@@ -28,6 +28,9 @@ struct ConfigData {
     RGBColorData ssr_link_colors_0[4];  // 0%時の色（各LED, 1-4）
     RGBColorData ssr_link_colors_100[4];// 100%時の色（各LED, 1-4）
 
+    // ランダムRGBアイドル開始までの時間（10秒単位、0=無効、最大255）
+    uint8_t random_rgb_timeout_10s;
+
     // 16バイトのメンバー
     char netbios_name[16];          // NETBIOS名（最大15文字 + 終端文字）
 };

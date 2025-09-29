@@ -48,6 +48,7 @@ private:
     void armIdleTimer();
     void onIdleTimeoutISR();
     void scheduleNextChangeISR();
+    void onChangeTimeoutISR();
 
     void onIdleBegin();
     void onChangeColor();

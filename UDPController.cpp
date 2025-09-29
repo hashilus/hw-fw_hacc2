@@ -557,6 +557,24 @@ void UDPController::processCommand(const char* command, int length) {
             }
         }
     }
+    else if (strncmp(cmd, "config random rgb status", 24) == 0) {
+        uint8_t v = _config_manager->getRandomRGBTimeout10s();
+        snprintf(_send_buffer, MAX_BUFFER_SIZE, "config random rgb status: %u", v);
+        sendResponse(_send_buffer);
+    }
+    else if (strncmp(cmd, "config random rgb ", 18) == 0) {
+        const char* args = cmd + 18;
+        // 値は0..255、単位は10秒。0は無効
+        int value = atoi(args);
+        if (value < 0 || value > 255) {
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "Error: Invalid value (0-255)");
+            sendResponse(_send_buffer);
+        } else {
+            _config_manager->setRandomRGBTimeout10s((uint8_t)value);
+            snprintf(_send_buffer, MAX_BUFFER_SIZE, "config random rgb set to %d (x10s)", value);
+            sendResponse(_send_buffer);
+        }
+    }
     else if (strncmp(cmd, "config ssr_freq ", 16) == 0) {
         const char* args = cmd + 16;
         if (strncmp(args, "status ", 7) == 0) {

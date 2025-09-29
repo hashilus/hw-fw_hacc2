@@ -530,7 +530,15 @@ int main()
 
     // IdleAnimator 初期化
     idle_animator = std::make_unique<IdleAnimator>(rgb_led.get());
-    idle_animator->setIdleTimeout( std::chrono::milliseconds(10000) ); // 10秒無通信で開始
+    // Config値（10秒単位, 0=無効）から反映
+    {
+        uint8_t units10s = config_manager->getRandomRGBTimeout10s();
+        if (units10s == 0) {
+            idle_animator->setIdleTimeout( std::chrono::milliseconds(0) );
+        } else {
+            idle_animator->setIdleTimeout( std::chrono::milliseconds(units10s * 10000) );
+        }
+    }
     idle_animator->setIntervalRange( std::chrono::milliseconds(800), std::chrono::milliseconds(3000) );
     idle_animator->setFadeDuration( std::chrono::milliseconds(600) );
     idle_animator->start();
@@ -757,6 +765,18 @@ int main()
     
     // Main thread handles LED updates
     while (true) {
+        // ランタイムでのアイドルタイムアウト反映（10秒単位設定）
+        static uint8_t last_units10s = 0xFF;
+        uint8_t units10s = config_manager->getRandomRGBTimeout10s();
+        if (units10s != last_units10s && idle_animator) {
+            last_units10s = units10s;
+            if (units10s == 0) {
+                idle_animator->setIdleTimeout(std::chrono::milliseconds(0));
+            } else {
+                idle_animator->setIdleTimeout(std::chrono::milliseconds(units10s * 10000));
+            }
+            idle_animator->notifyActivity();  // 変更を即反映（再アーム）
+        }
         // SSR制御の内部状態を更新（ゼロクロス・PWM対応）
         ssr.updateControl();
         

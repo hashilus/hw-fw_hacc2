@@ -65,6 +65,10 @@ public:
     RGBColorData getSSRLinkColor100(int led_id) const;  // 100%時の色を取得
     RGBColorData calculateLEDColorForSSR(int led_id, int duty) const;  // デューティ比に応じた色を計算
 
+    // ランダムRGBアイドル設定（10秒単位、0=無効、最大255）
+    uint8_t getRandomRGBTimeout10s() const { return _data.random_rgb_timeout_10s; }
+    void setRandomRGBTimeout10s(uint8_t value) { _data.random_rgb_timeout_10s = value; saveConfig(); }
+
     int8_t getSSRPWMFrequency(uint8_t channel = 0) const { 
         if (channel >= 1 && channel <= 4) {
             return _data.ssr_pwm_frequency[channel - 1]; 

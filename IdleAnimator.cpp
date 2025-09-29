@@ -57,6 +57,12 @@ void IdleAnimator::setFadeDuration(std::chrono::milliseconds fade_ms) {
 
 void IdleAnimator::armIdleTimer() {
     _idle_timeout.detach();
+    // 0は無効: タイマーを張らず、アイドル状態を解除して終了
+    if (_idle_timeout_ms.count() == 0) {
+        _idle_active = false;
+        _next_change_timeout.detach();
+        return;
+    }
     _idle_timeout.attach(callback(this, &IdleAnimator::onIdleTimeoutISR), _idle_timeout_ms);
 }
 
@@ -69,7 +75,7 @@ void IdleAnimator::scheduleNextChangeISR() {
     uint32_t span = _max_interval_ms.count() - _min_interval_ms.count();
     uint32_t jitter = span ? (std::rand() % (span + 1)) : 0;
     auto next_ms = _min_interval_ms + std::chrono::milliseconds(jitter);
-    _next_change_timeout.attach(callback(this, &IdleAnimator::onChangeColor), next_ms);
+    _next_change_timeout.attach(callback(this, &IdleAnimator::onChangeTimeoutISR), next_ms);
 }
 
 void IdleAnimator::onIdleBegin() {
@@ -95,6 +101,10 @@ void IdleAnimator::onChangeColor() {
 
     // 次回変更をスケジュール
     scheduleNextChangeISR();
+}
+
+void IdleAnimator::onChangeTimeoutISR() {
+    _queue.call(callback(this, &IdleAnimator::onChangeColor));
 }
 
 void IdleAnimator::pickBrightRandom(uint8_t& r, uint8_t& g, uint8_t& b) {
