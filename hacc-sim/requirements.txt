@@ -1,0 +1,3 @@
+# Tkinter is included with Python on Windows; no extra deps needed
+# Keep file for future extensions
+
