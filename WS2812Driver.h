@@ -7,10 +7,6 @@
 #define WS2812_LED_COUNT 256  // 各系統のLED数
 #define WS2812_SYSTEMS 3     // 系統数
 
-// WS2812信号タイミング（UART 2.4MHz 8N1）
-#define WS2812_0_BIT 0b100   // 0ビット用信号
-#define WS2812_1_BIT 0b110   // 1ビット用信号
-
 /**
  * WS2812 LED driver class
  * Controls 3 systems of WS2812 LEDs using UART TX
@@ -88,50 +84,43 @@ public:
     bool getColor(uint8_t system, uint8_t led_id, uint8_t* r, uint8_t* g, uint8_t* b);
 
 private:
-    // UART TX for WS2812 control
-    BufferedSerial _uart1;  // P5_0 - System 1
-    BufferedSerial _uart2;  // P5_3 - System 2
-    BufferedSerial _uart3;  // P2_14 - System 3
+    // SPI for WS2812 control (1系統=1本のMOSI)
+    SPI _spi0;  // SPI0: MOSI=P10_14, SCLK=P10_12
+    SPI _spi1;  // SPI1: MOSI=P11_14, SCLK=P11_12
+    SPI _spi3;  // SPI3: MOSI=P5_2,  SCLK=P5_0
     
     // DMA for burst transfer (temporarily disabled)
     // DMAC _dma1;  // System 1 DMA
     // DMAC _dma2;  // System 2 DMA
     // DMAC _dma3;  // System 3 DMA
     
-    // Color buffers for each system
-    uint8_t _buffer1[WS2812_LED_COUNT * 24];  // 24 bits per LED
-    uint8_t _buffer2[WS2812_LED_COUNT * 24];
-    uint8_t _buffer3[WS2812_LED_COUNT * 24];
+    // Encoded byte buffers for each system (9 bytes per LED)
+    uint8_t _buffer0[WS2812_LED_COUNT * 9];
+    uint8_t _buffer1[WS2812_LED_COUNT * 9];
+    uint8_t _buffer3_buf[WS2812_LED_COUNT * 9];
     
     // Current color data
     uint8_t _colors[WS2812_SYSTEMS][WS2812_LED_COUNT][3];  // [system][led][r,g,b]
     
     /**
-     * Convert RGB color to WS2812 signal
+     * Encode one LED's GRB to SPI byte stream (9 bytes per LED)
      * @param r Red value (0-255)
      * @param g Green value (0-255)
      * @param b Blue value (0-255)
-     * @param buffer Output buffer for WS2812 signal
+     * @param out9 Output buffer (size >= 9)
      */
-    void rgbToWS2812(uint8_t r, uint8_t g, uint8_t b, uint8_t* buffer);
+    void encodeGRBToSPI(uint8_t r, uint8_t g, uint8_t b, uint8_t* out9);
+
+    /** Encode one byte (MSB first) to 24 WS2812 bits (3 bytes) using 0->100,1->110 */
+    static void encodeByteTo24Bits(uint8_t value, uint8_t* out3);
     
     /**
-     * Initialize port inversion for UART TX
-     */
-    void initPortInversion();
-    
-    /**
-     * Initialize DMA for UART TX
-     */
-    void initDMA();
-    
-    /**
-     * Send WS2812 data via UART
-     * @param uart UART instance
+     * Send WS2812 data via SPI
+     * @param spi SPI instance
      * @param buffer Data buffer
      * @param length Buffer length
      */
-    void sendWS2812Data(BufferedSerial& uart, uint8_t* buffer, int length);
+    void sendWS2812Data(SPI& spi, const uint8_t* buffer, int length);
 };
 
 #endif // WS2812_DRIVER_H 
