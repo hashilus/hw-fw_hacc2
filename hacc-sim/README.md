@@ -1,8 +1,7 @@
 ## HACC2 Python Simulator
 
 - UDPポート: 5555（ハード側の`UDP_PORT`互換）
-- シリアル相当: GUI内のConsoleで同じコマンドを入力可能
-- GUI: SSR(4ch)とRGB(4個)、WS2812(3系統の平均色)を可視化
+- GUI: SSR(4ch)とRGB(4個)を可視化
 
 ### 起動
 
@@ -24,7 +23,6 @@ python .\app.py
 
 - SSR: `set`/`freq`/`get`
 - RGB: `rgb`/`rgbget`
-- WS2812: `ws2812`/`ws2812get`/`ws2812sys`/`ws2812off`
 - config: `config`/`config ssrlink ...`/`config rgb0|rgb100`/`config trans`/`config random rgb`/`config ssr_freq`/`config save|load`
 - その他: `info`/`sofia`/`mist`/`air`/`zerox`
 
