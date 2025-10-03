@@ -125,6 +125,16 @@ private:
      * @param length Buffer length
      */
     void sendWS2812Data(SPI& spi, const uint8_t* buffer, int length);
+
+#if DEVICE_SPI_ASYNCH
+    // 非同期SPI用：DMA転送完了フラグとコールバック
+    volatile bool _spi0_inflight = false;
+    volatile bool _spi1_inflight = false;
+    volatile bool _spi3_inflight = false;
+    void onSpi0Complete(int event);
+    void onSpi1Complete(int event);
+    void onSpi3Complete(int event);
+#endif
 };
 
 #endif // WS2812_DRIVER_H 

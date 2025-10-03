@@ -16,6 +16,11 @@ WS2812Driver::WS2812Driver()
     _spi0.frequency(2400000);
     _spi1.frequency(2400000);
     _spi3.frequency(2400000);
+#if DEVICE_SPI_ASYNCH
+    _spi0.set_dma_usage(DMAUsage::Always);
+    _spi1.set_dma_usage(DMAUsage::Always);
+    _spi3.set_dma_usage(DMAUsage::Always);
+#endif
     
     // Initialize color/transfer buffers
     memset(_colors, 0, sizeof(_colors));
@@ -109,7 +114,24 @@ bool WS2812Driver::update(uint8_t system) {
     }
     
     // Send WS2812 data using SPI
+#if DEVICE_SPI_ASYNCH
+    // 非同期転送（DMA希望）
+    volatile bool* inflight = nullptr;
+    mbed::Callback<void(int)> cb;
+    switch(system) {
+        case 1: inflight = &_spi0_inflight; cb = mbed::callback(this, &WS2812Driver::onSpi0Complete); break;
+        case 2: inflight = &_spi1_inflight; cb = mbed::callback(this, &WS2812Driver::onSpi1Complete); break;
+        case 3: inflight = &_spi3_inflight; cb = mbed::callback(this, &WS2812Driver::onSpi3Complete); break;
+    }
+    *inflight = true;
+    spi->transfer(buffer, WS2812_LED_COUNT * 9, nullptr, 0, cb, SPI_EVENT_COMPLETE);
+    // 呼び出し元が同期動作を期待するため、完了待ち
+    while (*inflight) {
+        ThisThread::yield();
+    }
+#else
     sendWS2812Data(*spi, buffer, WS2812_LED_COUNT * 9);
+#endif
     
     return true;
 }
@@ -177,6 +199,22 @@ void WS2812Driver::sendWS2812Data(SPI& spi, const uint8_t* buffer, int length) {
     // リセット >80us
     wait_us(100);
 }
+
+#if DEVICE_SPI_ASYNCH
+void WS2812Driver::onSpi0Complete(int event) {
+    // リセット >80us（転送完了後）
+    wait_us(100);
+    _spi0_inflight = false;
+}
+void WS2812Driver::onSpi1Complete(int event) {
+    wait_us(100);
+    _spi1_inflight = false;
+}
+void WS2812Driver::onSpi3Complete(int event) {
+    wait_us(100);
+    _spi3_inflight = false;
+}
+#endif
 
 void WS2812Driver::encodeByteTo24Bits(uint8_t value, uint8_t* out3) {
     uint32_t acc = 0;
