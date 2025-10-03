@@ -5,7 +5,9 @@
 WS2812Driver::WS2812Driver()
     : _spi0(P10_14, NC, P10_12, NC),
       _spi1(P11_14, NC, P11_12, NC),
-      _spi3(P5_2,   NC, P5_0,   NC)
+      _spi3(P5_2,   NC, P5_0,   NC),
+      _in_p5_3(P5_3),
+      _in_p2_14(P2_14)
 {
     // SPI設定（8bit, mode0, 2.4MHz）
     _spi0.format(8, 0);
@@ -20,6 +22,10 @@ WS2812Driver::WS2812Driver()
     memset(_buffer0, 0, sizeof(_buffer0));
     memset(_buffer1, 0, sizeof(_buffer1));
     memset(_buffer3_buf, 0, sizeof(_buffer3_buf));
+    
+    // 残置配線ピンはプル無しの入力に設定
+    _in_p5_3.mode(PullNone);
+    _in_p2_14.mode(PullNone);
     
     // Turn off all LEDs initially
     allOff();

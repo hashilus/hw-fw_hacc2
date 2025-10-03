@@ -89,6 +89,10 @@ private:
     SPI _spi1;  // SPI1: MOSI=P11_14, SCLK=P11_12
     SPI _spi3;  // SPI3: MOSI=P5_2,  SCLK=P5_0
     
+    // 残置配線対策: 旧UARTピンを入力に設定（高インピーダンス）
+    DigitalIn _in_p5_3; // was UART3 TX
+    DigitalIn _in_p2_14; // was UART0 TX
+    
     // DMA for burst transfer (temporarily disabled)
     // DMAC _dma1;  // System 1 DMA
     // DMAC _dma2;  // System 2 DMA
